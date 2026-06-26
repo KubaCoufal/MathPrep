@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MathPrep - Exam Practice</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MathPrep</h1>
+            <p class="subtitle">Math Exam Practice</p>
+        </header>
+
+        <nav id="main-menu">
+            <h2>Choose a topic</h2>
+            <div class="menu-grid">
+                <button class="menu-btn" onclick="startBasicMath()">
+                    <span class="menu-icon">+-×÷</span>
+                    <span class="menu-label">Basic Arithmetic</span>
+                    <span class="menu-desc">Addition, subtraction, multiplication, division</span>
+                </button>
+                <button class="menu-btn" onclick="startEigen()">
+                    <span class="menu-icon">λ</span>
+                    <span class="menu-label">Eigenvalues & Eigenvectors</span>
+                    <span class="menu-desc">Find eigenvalues and eigenvectors of matrices</span>
+                </button>
+            </div>
+        </nav>
+
+        <section id="basic-math" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2>Basic Arithmetic</h2>
+                <div class="score" id="basic-score">Score: 0/0</div>
+            </div>
+
+            <div class="settings-bar">
+                <label>Operations:
+                    <select id="operation-select">
+                        <option value="all">All</option>
+                        <option value="add">Addition (+)</option>
+                        <option value="sub">Subtraction (−)</option>
+                        <option value="mul">Multiplication (×)</option>
+                        <option value="div">Division (÷)</option>
+                    </select>
+                </label>
+                <label>Difficulty:
+                    <select id="difficulty-select">
+                        <option value="single">Single digit (1-9)</option>
+                        <option value="double">Double digit (10-99)</option>
+                        <option value="mixed">Mixed</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="problem-area">
+                <div class="problem" id="basic-problem"></div>
+                <div class="input-row">
+                    <input type="text" id="basic-answer" placeholder="Your answer" autocomplete="off" inputmode="decimal">
+                    <button class="check-btn" onclick="checkBasicAnswer()">Check</button>
+                </div>
+                <div class="feedback" id="basic-feedback"></div>
+                <button class="next-btn" id="basic-next" onclick="generateBasicProblem()" style="display:none">Next →</button>
+            </div>
+
+            <div class="stats-bar" id="basic-stats">
+                <span id="basic-streak">Streak: 0</span>
+                <span id="basic-time">Time: —</span>
+            </div>
+        </section>
+
+        <section id="eigen" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2>Eigenvalues & Eigenvectors</h2>
+                <div class="score" id="eigen-score">Score: 0/0</div>
+            </div>
+
+            <div class="settings-bar">
+                <label>Matrix size:
+                    <select id="matrix-size-select">
+                        <option value="2">2×2</option>
+                        <option value="3">3×3</option>
+                    </select>
+                </label>
+                <label>Task:
+                    <select id="eigen-task-select">
+                        <option value="eigenvalues">Find eigenvalues</option>
+                        <option value="eigenvectors">Find eigenvectors (given eigenvalues)</option>
+                        <option value="both">Both</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="problem-area">
+                <div class="problem" id="eigen-problem"></div>
+                <div id="eigen-input-area"></div>
+                <div class="feedback" id="eigen-feedback"></div>
+                <button class="next-btn" id="eigen-next" onclick="generateEigenProblem()" style="display:none">Next →</button>
+            </div>
+        </section>
+    </div>
+
+    <script src="basic-math.js"></script>
+    <script src="eigen.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
