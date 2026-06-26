@@ -41,6 +41,21 @@
                     <span class="menu-label">SVD</span>
                     <span class="menu-desc">Singular Value Decomposition</span>
                 </button>
+                <button class="menu-btn" onclick="startSimpleEq()">
+                    <span class="menu-icon">x=?</span>
+                    <span class="menu-label">Simple Equations</span>
+                    <span class="menu-desc">Solve linear equations for x</span>
+                </button>
+                <button class="menu-btn" onclick="startSystem()">
+                    <span class="menu-icon">xy</span>
+                    <span class="menu-label">2-Variable Systems</span>
+                    <span class="menu-desc">Solve systems of two linear equations</span>
+                </button>
+                <button class="menu-btn" onclick="startQuadratic()">
+                    <span class="menu-icon">x²</span>
+                    <span class="menu-label">Quadratic Equations</span>
+                    <span class="menu-desc">Solve using the quadratic formula</span>
+                </button>
             </div>
         </nav>
 
@@ -132,12 +147,27 @@
             </div>
             <div class="problem-area" id="decomp-problem-area"></div>
         </section>
+
+        <section id="equations" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2 id="eq-title">Equations</h2>
+                <div class="score" id="eq-score">Score: 0/0</div>
+            </div>
+            <div class="settings-bar" id="eq-settings"></div>
+            <div class="problem-area" id="eq-problem-area"></div>
+            <div class="stats-bar">
+                <span id="eq-streak">Streak: 0</span>
+                <span id="eq-time">Time: —</span>
+            </div>
+        </section>
     </div>
 
     <script src="stats.js"></script>
     <script src="basic-math.js"></script>
     <script src="eigen.js"></script>
     <script src="decompositions.js"></script>
+    <script src="equations.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

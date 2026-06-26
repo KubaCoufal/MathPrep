@@ -3,6 +3,7 @@ function goHome() {
     document.getElementById('basic-math').style.display = 'none';
     document.getElementById('eigen').style.display = 'none';
     document.getElementById('decomposition').style.display = 'none';
+    document.getElementById('equations').style.display = 'none';
     showStatsOnHome();
 }
 
@@ -11,6 +12,7 @@ document.addEventListener('keydown', function(e) {
         const basicSection = document.getElementById('basic-math');
         const eigenSection = document.getElementById('eigen');
         const decompSection = document.getElementById('decomposition');
+        const eqSection = document.getElementById('equations');
 
         if (basicSection.style.display !== 'none') {
             const nextBtn = document.getElementById('basic-next');
@@ -36,6 +38,15 @@ document.addEventListener('keydown', function(e) {
                 goNextStep();
             } else {
                 checkCurrentStep();
+            }
+        }
+
+        if (eqSection.style.display !== 'none') {
+            const nextBtn = document.getElementById('eq-next');
+            if (nextBtn && nextBtn.style.display !== 'none') {
+                generateEquation();
+            } else {
+                checkEquation();
             }
         }
     }
