@@ -26,6 +26,21 @@
                     <span class="menu-label">Eigenvalues & Eigenvectors</span>
                     <span class="menu-desc">Find eigenvalues and eigenvectors of matrices</span>
                 </button>
+                <button class="menu-btn" onclick="startLU()">
+                    <span class="menu-icon">LU</span>
+                    <span class="menu-label">LU Decomposition</span>
+                    <span class="menu-desc">Factor into lower and upper triangular</span>
+                </button>
+                <button class="menu-btn" onclick="startQR()">
+                    <span class="menu-icon">QR</span>
+                    <span class="menu-label">QR Decomposition</span>
+                    <span class="menu-desc">Gram-Schmidt orthogonalization</span>
+                </button>
+                <button class="menu-btn" onclick="startSVD()">
+                    <span class="menu-icon">UΣV</span>
+                    <span class="menu-label">SVD</span>
+                    <span class="menu-desc">Singular Value Decomposition</span>
+                </button>
             </div>
         </nav>
 
@@ -101,10 +116,28 @@
                 <button class="next-btn" id="eigen-next" onclick="generateEigenProblem()" style="display:none">Next →</button>
             </div>
         </section>
+        <section id="decomposition" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2 id="decomp-title">LU Decomposition</h2>
+                <div class="score" id="decomp-score">Steps: 0/0</div>
+            </div>
+            <div class="settings-bar">
+                <label>Matrix size:
+                    <select id="decomp-size-select" onchange="generateDecompProblem()">
+                        <option value="2">2×2</option>
+                        <option value="3">3×3</option>
+                    </select>
+                </label>
+            </div>
+            <div class="problem-area" id="decomp-problem-area"></div>
+        </section>
     </div>
 
+    <script src="stats.js"></script>
     <script src="basic-math.js"></script>
     <script src="eigen.js"></script>
+    <script src="decompositions.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

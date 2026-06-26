@@ -1,6 +1,7 @@
 let eigenCorrect = 0;
 let eigenTotal = 0;
 let currentEigenData = null;
+let eigenStartTime = null;
 
 function renderMatrix(matrix) {
     const n = matrix.length;
@@ -238,6 +239,7 @@ function generateEigenProblem() {
     document.getElementById('eigen-feedback').className = 'feedback';
     document.getElementById('eigen-next').style.display = 'none';
 
+    eigenStartTime = Date.now();
     const firstInput = document.querySelector('#eigen-input-area input');
     if (firstInput) firstInput.focus();
 }
@@ -297,6 +299,8 @@ function checkEigenAnswer() {
 
     eigenTotal++;
     if (allCorrect) eigenCorrect++;
+    const elapsed = (Date.now() - eigenStartTime) / 1000;
+    recordResult('Eigenvalues', allCorrect, parseFloat(elapsed.toFixed(1)));
 
     feedback.innerHTML = details.join('<br>');
     feedback.className = allCorrect ? 'feedback correct' : 'feedback wrong';

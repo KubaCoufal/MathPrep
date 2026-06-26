@@ -2,12 +2,15 @@ function goHome() {
     document.getElementById('main-menu').style.display = 'block';
     document.getElementById('basic-math').style.display = 'none';
     document.getElementById('eigen').style.display = 'none';
+    document.getElementById('decomposition').style.display = 'none';
+    showStatsOnHome();
 }
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         const basicSection = document.getElementById('basic-math');
         const eigenSection = document.getElementById('eigen');
+        const decompSection = document.getElementById('decomposition');
 
         if (basicSection.style.display !== 'none') {
             const nextBtn = document.getElementById('basic-next');
@@ -24,6 +27,15 @@ document.addEventListener('keydown', function(e) {
                 generateEigenProblem();
             } else {
                 checkEigenAnswer();
+            }
+        }
+
+        if (decompSection.style.display !== 'none') {
+            const nextBtn = document.getElementById('step-next');
+            if (nextBtn && nextBtn.style.display !== 'none') {
+                goNextStep();
+            } else {
+                checkCurrentStep();
             }
         }
     }

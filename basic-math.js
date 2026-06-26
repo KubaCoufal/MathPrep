@@ -73,7 +73,8 @@ function checkBasicAnswer() {
 
     const feedback = document.getElementById('basic-feedback');
 
-    if (userAnswer === basicCurrentAnswer) {
+    const isCorrect = userAnswer === basicCurrentAnswer;
+    if (isCorrect) {
         basicCorrect++;
         basicStreak++;
         feedback.textContent = `Correct! (${elapsed}s)`;
@@ -83,6 +84,7 @@ function checkBasicAnswer() {
         feedback.textContent = `Wrong — answer is ${basicCurrentAnswer}`;
         feedback.className = 'feedback wrong';
     }
+    recordResult('Basic Arithmetic', isCorrect, parseFloat(elapsed));
 
     document.getElementById('basic-score').textContent = `Score: ${basicCorrect}/${basicTotal}`;
     document.getElementById('basic-streak').textContent = `Streak: ${basicStreak}`;
