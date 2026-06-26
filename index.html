@@ -56,6 +56,26 @@
                     <span class="menu-label">Quadratic Equations</span>
                     <span class="menu-desc">Solve using the quadratic formula</span>
                 </button>
+                <button class="menu-btn" onclick="startMatPow()">
+                    <span class="menu-icon">Aⁿ</span>
+                    <span class="menu-label">Matrix Power</span>
+                    <span class="menu-desc">Compute Aⁿ via PDP⁻¹ diagonalization</span>
+                </button>
+                <button class="menu-btn" onclick="startLP()">
+                    <span class="menu-icon">LP</span>
+                    <span class="menu-label">Linear Programming</span>
+                    <span class="menu-desc">Optimize objective with linear constraints</span>
+                </button>
+                <button class="menu-btn" onclick="startUnconstrainedOpt()">
+                    <span class="menu-icon">∇f</span>
+                    <span class="menu-label">Unconstrained Optimization</span>
+                    <span class="menu-desc">Find and classify critical points</span>
+                </button>
+                <button class="menu-btn" onclick="startLagrange()">
+                    <span class="menu-icon">λ∇</span>
+                    <span class="menu-label">Lagrange Multipliers</span>
+                    <span class="menu-desc">Constrained optimization with Lagrange</span>
+                </button>
             </div>
         </nav>
 
@@ -161,6 +181,20 @@
                 <span id="eq-time">Time: —</span>
             </div>
         </section>
+
+        <section id="optimization" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2 id="opt-title">Optimization</h2>
+                <div class="score" id="opt-score">Score: 0/0</div>
+            </div>
+            <div class="settings-bar" id="opt-settings"></div>
+            <div class="problem-area" id="opt-problem-area"></div>
+            <div class="stats-bar">
+                <span id="opt-streak">Streak: 0</span>
+                <span id="opt-time">Time: —</span>
+            </div>
+        </section>
     </div>
 
     <script src="stats.js"></script>
@@ -168,6 +202,7 @@
     <script src="eigen.js"></script>
     <script src="decompositions.js"></script>
     <script src="equations.js"></script>
+    <script src="optimization.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -4,6 +4,7 @@ function goHome() {
     document.getElementById('eigen').style.display = 'none';
     document.getElementById('decomposition').style.display = 'none';
     document.getElementById('equations').style.display = 'none';
+    document.getElementById('optimization').style.display = 'none';
     showStatsOnHome();
 }
 
@@ -47,6 +48,16 @@ document.addEventListener('keydown', function(e) {
                 generateEquation();
             } else {
                 checkEquation();
+            }
+        }
+
+        const optSection = document.getElementById('optimization');
+        if (optSection.style.display !== 'none') {
+            const nextBtn = document.getElementById('opt-next');
+            if (nextBtn && nextBtn.style.display !== 'none') {
+                generateOptProblem();
+            } else {
+                checkOptProblem();
             }
         }
     }

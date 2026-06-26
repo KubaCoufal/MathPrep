@@ -399,6 +399,16 @@ h2 {
     gap: 0.3rem;
 }
 
+.opt-select {
+    background: #1e293b;
+    border: 2px solid #475569;
+    color: #e2e8f0;
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    outline: none;
+}
+
 /* Step wizard */
 .step-progress {
     font-size: 0.9rem;

@@ -1,5 +1,5 @@
 let wizardState = null;
-let decompScores = { lu: { c: 0, t: 0 }, qr: { c: 0, t: 0 }, svd: { c: 0, t: 0 } };
+let decompScores = { lu: { c: 0, t: 0 }, qr: { c: 0, t: 0 }, svd: { c: 0, t: 0 }, matpow: { c: 0, t: 0 } };
 let currentDecompType = 'lu';
 
 function mMul(A, B) {
@@ -147,7 +147,7 @@ function checkCurrentStep() {
     const fb = document.getElementById('step-feedback');
 
     const elapsed = (Date.now() - wizardState.stepStart) / 1000;
-    const topicNames = { lu: 'LU Decomposition', qr: 'QR Decomposition', svd: 'SVD' };
+    const topicNames = { lu: 'LU Decomposition', qr: 'QR Decomposition', svd: 'SVD', matpow: 'Matrix Power' };
     if (result.correct) {
         decompScores[wizardState.type].c++;
         fb.textContent = (result.message || 'Correct!') + ` (${elapsed.toFixed(1)}s)`;
@@ -184,6 +184,7 @@ function generateDecompProblem() {
     const size = parseInt(document.getElementById('decomp-size-select').value);
     if (currentDecompType === 'lu') generateLU(size);
     else if (currentDecompType === 'qr') generateQR(size);
+    else if (currentDecompType === 'matpow') generateMatPow(size);
     else generateSVD(size);
 }
 
@@ -713,7 +714,7 @@ function startDecomp(type, title) {
     document.getElementById('decomp-score').textContent = 'Steps: 0/0';
 
     const sizeSelect = document.getElementById('decomp-size-select');
-    if (type === 'svd') {
+    if (type === 'svd' || type === 'matpow') {
         sizeSelect.innerHTML = '<option value="2">2×2</option><option value="3">3×3</option>';
         sizeSelect.value = '2';
     } else {
@@ -725,3 +726,140 @@ function startDecomp(type, title) {
 function startLU() { startDecomp('lu', 'LU Decomposition'); }
 function startQR() { startDecomp('qr', 'QR Decomposition'); }
 function startSVD() { startDecomp('svd', 'SVD'); }
+function startMatPow() { startDecomp('matpow', 'Matrix Power (Aⁿ)'); }
+
+// ============ Matrix Power via PDP⁻¹ ============
+
+function generateMatPow(n) {
+    if (n === 3) {
+        document.getElementById('decomp-problem-area').innerHTML =
+            '<div class="step-instruction">3×3 matrix power via diagonalization is very complex by hand. Practice with 2×2 first!</div>' +
+            '<button class="next-btn" onclick="document.getElementById(\'decomp-size-select\').value=\'2\';generateDecompProblem()">Switch to 2×2</button>';
+        return;
+    }
+
+    let lam1, lam2;
+    do {
+        lam1 = randInt(-2, 3);
+        lam2 = randInt(-2, 3);
+    } while (lam1 === lam2);
+
+    const maxAbs = Math.max(Math.abs(lam1), Math.abs(lam2));
+    const maxPow = maxAbs >= 3 ? 3 : (maxAbs >= 2 ? 4 : 6);
+    const power = randInt(2, Math.min(maxPow, 5));
+
+    const pChoices = [
+        [[1,1],[0,1]], [[1,0],[1,1]], [[2,1],[1,1]],
+        [[1,1],[1,2]], [[3,1],[2,1]], [[1,2],[1,3]]
+    ];
+    const P = pChoices[Math.floor(Math.random() * pChoices.length)];
+    const detP = P[0][0] * P[1][1] - P[0][1] * P[1][0];
+    const Pinv = [
+        [P[1][1] / detP, -P[0][1] / detP],
+        [-P[1][0] / detP, P[0][0] / detP]
+    ];
+
+    const D = [[lam1, 0], [0, lam2]];
+    const A = mMul(mMul(P, D), Pinv);
+    const Dn = [[Math.pow(lam1, power), 0], [0, Math.pow(lam2, power)]];
+    const An = mMul(mMul(P, Dn), Pinv);
+
+    const v1 = [P[0][0], P[1][0]];
+    const v2 = [P[0][1], P[1][1]];
+    const trA = A[0][0] + A[1][1];
+    const detA = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    const tol = 0.1;
+    const sup = `<sup>${power}</sup>`;
+
+    const steps = [
+        {
+            content: `${renderMat(A, 'A =')}
+                <div class="step-instruction">Compute A${sup} using diagonalization: A = PDP⁻¹ → A${sup} = PD${sup}P⁻¹<br><br>
+                Step 1: Find the eigenvalues of A.<br>
+                det(A − λI) = λ² − ${fmtNum(trA)}λ + ${fmtNum(detA)} = 0</div>
+                ${inputScalarHTML('mp-l1', 'λ₁ =')}
+                ${inputScalarHTML('mp-l2', 'λ₂ =')}`,
+            validate: () => {
+                const l1 = readScalar('mp-l1'), l2 = readScalar('mp-l2');
+                const ok = (approxEq(l1, lam1, 0.01) && approxEq(l2, lam2, 0.01)) ||
+                           (approxEq(l1, lam2, 0.01) && approxEq(l2, lam1, 0.01));
+                if (ok) return { correct: true, message: `λ₁ = ${lam1}, λ₂ = ${lam2}` };
+                return { correct: false, message: `λ₁ = ${lam1}, λ₂ = ${lam2}` };
+            }
+        },
+        {
+            content: `${renderMat(A, 'A =')}
+                <div class="step-instruction">Step 2: Find an eigenvector for each eigenvalue.<br>
+                For λ = ${lam1}: solve (A − ${lam1}I)v = 0<br>
+                For λ = ${lam2}: solve (A − ${lam2}I)v = 0</div>
+                ${inputVectorHTML('mp-v1', 2, 'v₁ (for λ = ' + lam1 + '):')}
+                ${inputVectorHTML('mp-v2', 2, 'v₂ (for λ = ' + lam2 + '):')}`,
+            validate: () => {
+                const uv1 = readVector('mp-v1', 2), uv2 = readVector('mp-v2', 2);
+                let errs = [];
+                if (!isApproxScalarMult(uv1, v1, 0.15))
+                    errs.push(`v₁ should be a multiple of [${v1.join(', ')}]`);
+                if (!isApproxScalarMult(uv2, v2, 0.15))
+                    errs.push(`v₂ should be a multiple of [${v2.join(', ')}]`);
+                if (errs.length === 0) return { correct: true };
+                return { correct: false, message: errs.join('<br>') };
+            }
+        },
+        {
+            content: `<div class="step-instruction">Step 3: Using P = [v₁ | v₂]:</div>
+                ${renderMat(P, 'P =')}
+                <div class="step-instruction">Enter D (diagonal eigenvalue matrix) and D${sup}:</div>
+                ${inputMatrixHTML('mp-D', 2, 2, [[null, 0], [0, null]], 'D =')}
+                ${inputMatrixHTML('mp-Dn', 2, 2, [[null, 0], [0, null]], 'D' + sup + ' =')}`,
+            validate: () => {
+                const Dv = readMatrixPF('mp-D', 2, 2, [[null, 0], [0, null]]);
+                const Dnv = readMatrixPF('mp-Dn', 2, 2, [[null, 0], [0, null]]);
+                let errs = [];
+                if (!approxEq(Dv[0][0], lam1, 0.01) || !approxEq(Dv[1][1], lam2, 0.01))
+                    errs.push(`D = diag(${lam1}, ${lam2})`);
+                if (!approxEq(Dnv[0][0], Dn[0][0], 0.5) || !approxEq(Dnv[1][1], Dn[1][1], 0.5))
+                    errs.push(`D${sup} = diag(${fmtNum(Dn[0][0])}, ${fmtNum(Dn[1][1])})`);
+                if (errs.length === 0) return { correct: true };
+                return { correct: false, message: errs.join('<br>') };
+            }
+        },
+        {
+            content: `<div class="step-instruction">Step 4: Compute P⁻¹<br><br>
+                P = ${matStr(P)}, det(P) = ${fmtNum(detP)}<br>
+                P⁻¹ = (1/${fmtNum(detP)}) · adj(P)</div>
+                ${inputMatrixHTML('mp-Pinv', 2, 2, [[null, null], [null, null]], 'P⁻¹ =')}`,
+            validate: () => {
+                const Piv = readMatrixPF('mp-Pinv', 2, 2, [[null, null], [null, null]]);
+                let ok = true;
+                for (let i = 0; i < 2; i++)
+                    for (let j = 0; j < 2; j++)
+                        if (!approxEq(Piv[i][j], Pinv[i][j], tol)) ok = false;
+                if (ok) return { correct: true };
+                return { correct: false, message: `P⁻¹ = ${matStr(Pinv)}` };
+            }
+        },
+        {
+            content: `<div class="step-instruction">Step 5: Compute A${sup} = P · D${sup} · P⁻¹</div>
+                ${renderMat(P, 'P =')}
+                <div class="step-instruction">D${sup} = diag(${fmtNum(Dn[0][0])}, ${fmtNum(Dn[1][1])})</div>
+                ${renderMat(Pinv, 'P⁻¹ =')}
+                ${inputMatrixHTML('mp-An', 2, 2, [[null, null], [null, null]], 'A' + sup + ' =')}`,
+            validate: () => {
+                const Anv = readMatrixPF('mp-An', 2, 2, [[null, null], [null, null]]);
+                let ok = true;
+                for (let i = 0; i < 2; i++)
+                    for (let j = 0; j < 2; j++)
+                        if (!approxEq(Anv[i][j], An[i][j], 0.5)) ok = false;
+                if (ok) return { correct: true, message: `A${sup} = PD${sup}P⁻¹ ✓` };
+                return { correct: false, message: `A${sup} = ${matStr(An)}` };
+            }
+        }
+    ];
+
+    const summary = () => `<div class="summary-matrices">
+        ${renderMat(A, 'A =')}${renderMat(P, 'P =')}${renderMat(D, 'D =')}
+        ${renderMat(Dn, 'D' + sup + ' =')}${renderMat(An, 'A' + sup + ' =')}
+        <div class="verify-msg">A${sup} = PD${sup}P⁻¹ ✓</div></div>`;
+
+    startWizard('matpow', steps, summary);
+}
