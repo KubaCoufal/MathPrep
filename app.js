@@ -5,6 +5,8 @@ function goHome() {
     document.getElementById('decomposition').style.display = 'none';
     document.getElementById('equations').style.display = 'none';
     document.getElementById('optimization').style.display = 'none';
+    document.getElementById('graph-section').style.display = 'none';
+    document.getElementById('theory-section').style.display = 'none';
     showStatsOnHome();
 }
 
@@ -58,6 +60,28 @@ document.addEventListener('keydown', function(e) {
                 generateOptProblem();
             } else {
                 checkOptProblem();
+            }
+        }
+
+        const graphSection = document.getElementById('graph-section');
+        if (graphSection.style.display !== 'none') {
+            const nextBtn = document.getElementById('graph-next');
+            if (nextBtn && nextBtn.style.display !== 'none') {
+                generateCurrentGraphProblem();
+            } else {
+                const checkBtns = graphSection.querySelectorAll('.check-btn');
+                if (checkBtns.length) checkBtns[0].click();
+            }
+        }
+
+        const theorySection = document.getElementById('theory-section');
+        if (theorySection.style.display !== 'none') {
+            const nextBtn = document.getElementById('theory-next');
+            if (nextBtn && nextBtn.style.display !== 'none') {
+                generateCurrentTheoryProblem();
+            } else {
+                const checkBtns = theorySection.querySelectorAll('.check-btn');
+                if (checkBtns.length) checkBtns[0].click();
             }
         }
     }

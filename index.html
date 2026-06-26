@@ -76,6 +76,86 @@
                     <span class="menu-label">Lagrange Multipliers</span>
                     <span class="menu-desc">Constrained optimization with Lagrange</span>
                 </button>
+                <button class="menu-btn" onclick="startBFS()">
+                    <span class="menu-icon">BFS</span>
+                    <span class="menu-label">BFS Traversal</span>
+                    <span class="menu-desc">Breadth-first search on a graph</span>
+                </button>
+                <button class="menu-btn" onclick="startDFS()">
+                    <span class="menu-icon">DFS</span>
+                    <span class="menu-label">DFS Traversal</span>
+                    <span class="menu-desc">Depth-first search on a graph</span>
+                </button>
+                <button class="menu-btn" onclick="startIndependence()">
+                    <span class="menu-icon">α</span>
+                    <span class="menu-label">Independence Number</span>
+                    <span class="menu-desc">Find maximum independent set size</span>
+                </button>
+                <button class="menu-btn" onclick="startClique()">
+                    <span class="menu-icon">ω</span>
+                    <span class="menu-label">Clique Number</span>
+                    <span class="menu-desc">Find maximum clique size</span>
+                </button>
+                <button class="menu-btn" onclick="startVertexCover()">
+                    <span class="menu-icon">β</span>
+                    <span class="menu-label">Vertex Cover</span>
+                    <span class="menu-desc">Find minimum vertex cover size</span>
+                </button>
+                <button class="menu-btn" onclick="startChromatic()">
+                    <span class="menu-icon">χ</span>
+                    <span class="menu-label">Chromatic Number</span>
+                    <span class="menu-desc">Minimum colors to color the graph</span>
+                </button>
+                <button class="menu-btn" onclick="startDomination()">
+                    <span class="menu-icon">γ</span>
+                    <span class="menu-label">Domination Number</span>
+                    <span class="menu-desc">Find minimum dominating set size</span>
+                </button>
+                <button class="menu-btn" onclick="startEdgeConn()">
+                    <span class="menu-icon">λG</span>
+                    <span class="menu-label">Edge Connectivity</span>
+                    <span class="menu-desc">Minimum edges to disconnect</span>
+                </button>
+                <button class="menu-btn" onclick="startVertexConn()">
+                    <span class="menu-icon">κ</span>
+                    <span class="menu-label">Vertex Connectivity</span>
+                    <span class="menu-desc">Minimum vertices to disconnect</span>
+                </button>
+                <button class="menu-btn" onclick="startMaxFlow()">
+                    <span class="menu-icon">flow</span>
+                    <span class="menu-label">Max Flow / Min Cut</span>
+                    <span class="menu-desc">Ford-Fulkerson on small networks</span>
+                </button>
+                <button class="menu-btn" onclick="startSAT()">
+                    <span class="menu-icon">SAT</span>
+                    <span class="menu-label">SAT Satisfiability</span>
+                    <span class="menu-desc">Find satisfying assignment or prove UNSAT</span>
+                </button>
+                <button class="menu-btn" onclick="startComplexity()">
+                    <span class="menu-icon">P/NP</span>
+                    <span class="menu-label">Complexity Classification</span>
+                    <span class="menu-desc">Is this problem in P or NP-complete?</span>
+                </button>
+                <button class="menu-btn" onclick="startReductions()">
+                    <span class="menu-icon">≤p</span>
+                    <span class="menu-label">Polynomial Reductions</span>
+                    <span class="menu-desc">Reduce problem X to problem Y</span>
+                </button>
+                <button class="menu-btn" onclick="startILP()">
+                    <span class="menu-icon">ILP</span>
+                    <span class="menu-label">ILP Formulations</span>
+                    <span class="menu-desc">Write graph problems as ILP</span>
+                </button>
+                <button class="menu-btn" onclick="startCorrelation()">
+                    <span class="menu-icon">r</span>
+                    <span class="menu-label">Correlation Coefficient</span>
+                    <span class="menu-desc">Compute Pearson r from data</span>
+                </button>
+                <button class="menu-btn" onclick="startMutualInfo()">
+                    <span class="menu-icon">I(X;Y)</span>
+                    <span class="menu-label">Mutual Information</span>
+                    <span class="menu-desc">Compute mutual information in bits</span>
+                </button>
             </div>
         </nav>
 
@@ -197,12 +277,52 @@
         </section>
     </div>
 
+        <section id="graph-section" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2 id="graph-title">Graph Practice</h2>
+                <div class="score" id="graph-score">Score: 0/0</div>
+            </div>
+            <div class="settings-bar">
+                <label>Vertices:
+                    <select id="graph-size-select">
+                        <option value="5">5</option>
+                        <option value="6" selected>6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                    </select>
+                </label>
+            </div>
+            <div class="problem-area" id="graph-problem-area"></div>
+            <div class="stats-bar">
+                <span id="graph-streak">Streak: 0</span>
+                <span id="graph-time">Time: —</span>
+            </div>
+        </section>
+
+        <section id="theory-section" class="practice-section" style="display:none">
+            <div class="section-header">
+                <button class="back-btn" onclick="goHome()">← Back</button>
+                <h2 id="theory-title">Theory Practice</h2>
+                <div class="score" id="theory-score">Score: 0/0</div>
+            </div>
+            <div class="settings-bar" id="theory-settings"></div>
+            <div class="problem-area" id="theory-problem-area"></div>
+            <div class="stats-bar">
+                <span id="theory-streak">Streak: 0</span>
+                <span id="theory-time">Time: —</span>
+            </div>
+        </section>
+
     <script src="stats.js"></script>
     <script src="basic-math.js"></script>
     <script src="eigen.js"></script>
     <script src="decompositions.js"></script>
     <script src="equations.js"></script>
     <script src="optimization.js"></script>
+    <script src="graph-utils.js"></script>
+    <script src="graph-practice.js"></script>
+    <script src="theory-practice.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
