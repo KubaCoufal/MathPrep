@@ -18,17 +18,19 @@ function renderMatrix(matrix) {
 }
 
 function generate2x2() {
-    const strategies = [generateDiagonalizable2x2, generateIntegerEigen2x2, generateSimple2x2];
-    return strategies[Math.floor(Math.random() * strategies.length)]();
+    const roll = Math.random();
+    if (roll < 0.75) return generateDiagonalizable2x2();
+    if (roll < 0.9) return generateSimple2x2();
+    return generateIntegerEigen2x2();
 }
 
 function generateSimple2x2() {
-    const l1 = randInt(-4, 5);
-    const l2 = randInt(-4, 5);
+    const l1 = randNonZeroInt(-4, 5);
+    const l2 = randDifferentInt(-4, 5, l1);
 
     const a = l1;
     const d = l2;
-    const b = randInt(-3, 3);
+    const b = randNonZeroInt(-3, 3);
     const c = 0;
 
     return {
@@ -39,18 +41,18 @@ function generateSimple2x2() {
 }
 
 function generateDiagonalizable2x2() {
-    const l1 = randInt(-5, 5);
-    let l2 = randInt(-5, 5);
-
-    const p00 = 1, p01 = randInt(-2, 2);
-    const p10 = 0, p11 = 1;
-
-    const a = l1;
-    const b = p01 * (l2 - l1);
-    const c = 0;
-    const d = l2;
-
-    const matrix = [[a, b], [c, d]];
+    const l1 = randNonZeroInt(-4, 4);
+    const l2 = randDifferentInt(-4, 4, l1);
+    const pChoices = [
+        [[1, 1], [1, 2]],
+        [[1, 2], [1, 3]],
+        [[2, 1], [1, 1]],
+        [[1, -1], [2, -1]],
+        [[1, 2], [-1, -1]],
+        [[-1, 1], [-2, 1]]
+    ];
+    const p = pChoices[Math.floor(Math.random() * pChoices.length)];
+    const matrix = multiply2x2(multiply2x2(p, [[l1, 0], [0, l2]]), inverse2x2(p));
     const eigenvalues = [...new Set([l1, l2])].sort((a, b) => a - b);
 
     return {
@@ -61,14 +63,8 @@ function generateDiagonalizable2x2() {
 }
 
 function generateIntegerEigen2x2() {
-    const l1 = randInt(-4, 4);
-    const l2 = randInt(-4, 4);
-
-    const a = l1 + l2;
-    const det = l1 * l2;
-
-    const b = randInt(1, 3) * (Math.random() < 0.5 ? 1 : -1);
-    const c = (det - a * l1 + l1 * l1) !== 0 ? (a * b - b * l1) / (l1 - l2 || 1) : 0;
+    const l1 = randNonZeroInt(-4, 4);
+    const l2 = randDifferentInt(-4, 4, l1);
 
     const matrix = [[l1, 0], [0, l2]];
     const eigenvalues = [...new Set([l1, l2])].sort((a, b) => a - b);
@@ -78,6 +74,43 @@ function generateIntegerEigen2x2() {
         eigenvalues,
         eigenvectors: computeEigenvectors2x2(matrix, eigenvalues)
     };
+}
+
+function randNonZeroInt(min, max) {
+    let value;
+    do {
+        value = randInt(min, max);
+    } while (value === 0);
+    return value;
+}
+
+function randDifferentInt(min, max, disallowed) {
+    let value;
+    do {
+        value = randInt(min, max);
+    } while (value === disallowed);
+    return value;
+}
+
+function multiply2x2(a, b) {
+    return [
+        [
+            a[0][0] * b[0][0] + a[0][1] * b[1][0],
+            a[0][0] * b[0][1] + a[0][1] * b[1][1]
+        ],
+        [
+            a[1][0] * b[0][0] + a[1][1] * b[1][0],
+            a[1][0] * b[0][1] + a[1][1] * b[1][1]
+        ]
+    ];
+}
+
+function inverse2x2(m) {
+    const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+    return [
+        [m[1][1] / det, -m[0][1] / det],
+        [-m[1][0] / det, m[0][0] / det]
+    ];
 }
 
 function computeEigenvectors2x2(m, eigenvalues) {

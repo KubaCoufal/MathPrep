@@ -33,6 +33,22 @@ function parseNum(s) {
 }
 
 function approxEq(a, b, tol) { return Math.abs(a - b) < (tol || 0.05); }
+function matrixApproxEq(A, B, tol) {
+    for (let i = 0; i < A.length; i++)
+        for (let j = 0; j < A[0].length; j++)
+            if (!approxEq(A[i][j], B[i][j], tol)) return false;
+    return true;
+}
+
+function isOrthogonalMatrix(M, tol) {
+    const MtM = mMul(mTrans(M), M);
+    for (let i = 0; i < MtM.length; i++)
+        for (let j = 0; j < MtM.length; j++) {
+            const expected = i === j ? 1 : 0;
+            if (!approxEq(MtM[i][j], expected, tol)) return false;
+        }
+    return true;
+}
 function fmtNum(x) {
     if (Number.isInteger(x)) return String(x);
     const r = Math.round(x * 1000) / 1000;
@@ -204,11 +220,44 @@ function generateLU(n) {
             return 0;
         }));
     const A = mMul(L, U);
-    const steps = n === 2 ? buildLU2(A, L, U) : buildLU3(A, L, U);
+    const steps = buildLUFullMatrixStep(A, L, U);
     const summary = () => `<div class="summary-matrices">
         ${renderMat(A, 'A =')}${renderMat(L, 'L =')}${renderMat(U, 'U =')}
         <div class="verify-msg">A = LU ✓</div></div>`;
     startWizard('lu', steps, summary);
+}
+
+function buildLUFullMatrixStep(A, L, U) {
+    const n = A.length;
+    const Lpf = Array.from({ length: n }, (_, i) =>
+        Array.from({ length: n }, (_, j) => {
+            if (i === j) return 1;
+            if (j > i) return 0;
+            return null;
+        }));
+    const Upf = Array.from({ length: n }, (_, i) =>
+        Array.from({ length: n }, (_, j) => j < i ? 0 : null));
+
+    return [{
+        content: `${renderMat(A, 'A =')}
+            <div class="step-instruction">Enter the L and U matrices. The fixed entries are already filled in.</div>
+            ${inputMatrixHTML('lu-L', n, n, Lpf, 'L =')}
+            ${inputMatrixHTML('lu-U', n, n, Upf, 'U =')}`,
+        validate: () => {
+            const Lv = readMatrixPF('lu-L', n, n, Lpf);
+            const Uv = readMatrixPF('lu-U', n, n, Upf);
+            let errs = [];
+            for (let i = 0; i < n; i++)
+                for (let j = 0; j < n; j++) {
+                    if (Lpf[i][j] === null && !approxEq(Lv[i][j], L[i][j], 0.01))
+                        errs.push(`L${i + 1}${j + 1} = ${fmtNum(L[i][j])}`);
+                    if (Upf[i][j] === null && !approxEq(Uv[i][j], U[i][j], 0.01))
+                        errs.push(`U${i + 1}${j + 1} = ${fmtNum(U[i][j])}`);
+                }
+            if (errs.length === 0) return { correct: true, message: 'A = LU' };
+            return { correct: false, message: errs.join('<br>') };
+        }
+    }];
 }
 
 function buildLU2(A, L, U) {
@@ -384,11 +433,40 @@ function generateQR(n) {
     }
 
     const Qmat = A.map((_, i) => qCols.map(col => col[i]));
-    const steps = n === 2 ? buildQR2(A, Qmat, R, qCols) : buildQR3(A, Qmat, R, qCols);
+    const steps = buildQRFullMatrixStep(A, Qmat, R);
     const summary = () => `<div class="summary-matrices">
         ${renderMat(A, 'A =')}${renderMat(Qmat, 'Q =')}${renderMat(R, 'R =')}
         <div class="verify-msg">A = QR ✓</div></div>`;
     startWizard('qr', steps, summary);
+}
+
+function buildQRFullMatrixStep(A, Q, R) {
+    const n = A.length;
+    const Rpf = Array.from({ length: n }, (_, i) =>
+        Array.from({ length: n }, (_, j) => j < i ? 0 : null));
+    const tol = n === 2 ? 0.05 : 0.08;
+    const hint = n === 2 ? 'Use decimals or fractions.' : 'Round decimals to about 2 places.';
+
+    return [{
+        content: `${renderMat(A, 'A =')}
+            <div class="step-instruction">Enter the Q and R matrices. ${hint}</div>
+            ${inputMatrixHTML('qr-Q', n, n, null, 'Q =')}
+            ${inputMatrixHTML('qr-R', n, n, Rpf, 'R =')}`,
+        validate: () => {
+            const Qv = readMatrixPF('qr-Q', n, n, null);
+            const Rv = readMatrixPF('qr-R', n, n, Rpf);
+            let errs = [];
+            for (let i = 0; i < n; i++)
+                for (let j = 0; j < n; j++) {
+                    if (!approxEq(Qv[i][j], Q[i][j], tol))
+                        errs.push(`Q${i + 1}${j + 1} = ${fmtNum(Q[i][j])}`);
+                    if (Rpf[i][j] === null && !approxEq(Rv[i][j], R[i][j], tol))
+                        errs.push(`R${i + 1}${j + 1} = ${fmtNum(R[i][j])}`);
+                }
+            if (errs.length === 0) return { correct: true, message: 'A = QR' };
+            return { correct: false, message: errs.join('<br>') };
+        }
+    }];
 }
 
 function buildQR2(A, Q, R, qCols) {
@@ -611,6 +689,14 @@ function generateSVD(size) {
     const Umat = [[uCols[0][0], uCols[1][0]], [uCols[0][1], uCols[1][1]]];
     const Smat = [[sortedSigma[0], 0], [0, sortedSigma[1]]];
 
+    const matrixSteps = buildSVDFullMatrixStep(A, Umat, Smat, Vmat, sortedSigma);
+    const matrixSummary = () => `<div class="summary-matrices">
+        ${renderMat(A, 'A =')}${renderMat(Umat, 'U =')}
+        ${renderMat(Smat, 'Sigma =')}${renderMat(Vmat, 'V =')}
+        <div class="verify-msg">A = U Sigma V^T</div></div>`;
+    startWizard('svd', matrixSteps, matrixSummary);
+    return;
+
     const tol = 0.1;
     const hint = ' (Round to 2 decimals, or use fractions like 3/5)';
 
@@ -701,6 +787,36 @@ function generateSVD(size) {
 
 function matStr(M) {
     return '[' + M.map(r => '[' + r.map(fmtNum).join(', ') + ']').join(', ') + ']';
+}
+
+function buildSVDFullMatrixStep(A, U, S, V, sigma) {
+    const Spf = [[null, 0], [0, null]];
+    const tol = 0.15;
+
+    return [{
+        content: `${renderMat(A, 'A =')}
+            <div class="step-instruction">Enter U, Sigma, and V. Round decimals to about 2 places, or use fractions like 3/5.</div>
+            ${inputMatrixHTML('svd-U', 2, 2, null, 'U =')}
+            ${inputMatrixHTML('svd-S', 2, 2, Spf, 'Sigma =')}
+            ${inputMatrixHTML('svd-V', 2, 2, null, 'V =')}`,
+        validate: () => {
+            const Uv = readMatrixPF('svd-U', 2, 2, null);
+            const Sv = readMatrixPF('svd-S', 2, 2, Spf);
+            const Vv = readMatrixPF('svd-V', 2, 2, null);
+            const reconstructed = mMul(mMul(Uv, Sv), mTrans(Vv));
+            const errs = [];
+
+            if (!isOrthogonalMatrix(Uv, tol)) errs.push('U should be orthogonal.');
+            if (!isOrthogonalMatrix(Vv, tol)) errs.push('V should be orthogonal.');
+            if (!approxEq(Sv[0][0], sigma[0], tol) || !approxEq(Sv[1][1], sigma[1], tol))
+                errs.push(`Sigma should have diagonal entries ${fmtNum(sigma[0])}, ${fmtNum(sigma[1])}.`);
+            if (!matrixApproxEq(reconstructed, A, 0.25))
+                errs.push('Check that U * Sigma * V^T equals A.');
+
+            if (errs.length === 0) return { correct: true, message: 'A = U Sigma V^T' };
+            return { correct: false, message: `${errs.join('<br>')}<br>One valid answer:<br>U = ${matStr(U)}<br>Sigma = ${matStr(S)}<br>V = ${matStr(V)}` };
+        }
+    }];
 }
 
 // ============ Start Functions ============
