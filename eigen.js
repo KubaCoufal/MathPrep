@@ -338,6 +338,16 @@ function checkEigenAnswer() {
     feedback.innerHTML = details.join('<br>');
     feedback.className = allCorrect ? 'feedback correct' : 'feedback wrong';
 
+    if (data.size === 2) {
+        const mat = data.matrix;
+        const p = mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0];
+        const mVal = (mat[0][0] + mat[1][1]) / 2;
+        feedback.innerHTML += `<div class="solution-detail"><h4>2×2 shortcut:</h4>
+            <p>p = det(A) = ${mat[0][0]}·${mat[1][1]} − ${mat[0][1]}·${mat[1][0]} = ${p} (product of eigenvalues)</p>
+            <p>m = mean of main diagonal = (${mat[0][0]} + ${mat[1][1]}) / 2 = ${mVal}</p>
+            <p>λ = m ± √(m² − p) = ${mVal} ± √(${mVal}² − ${p})</p></div>`;
+    }
+
     if (!allCorrect) {
         let solutionHTML = '<div class="solution-detail"><h4>Solution steps:</h4>';
         solutionHTML += `<p>det(A - λI) = 0</p>`;

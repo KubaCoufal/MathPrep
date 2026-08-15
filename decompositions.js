@@ -90,13 +90,13 @@ function renderMat(m, label) {
 
 function inputScalarHTML(id, label) {
     return `<div class="step-field"><label>${label}</label>
-        <input type="text" id="${id}" autocomplete="off" class="scalar-input"></div>`;
+        <input type="text" id="${id}" autocomplete="off" class="scalar-input" onkeydown="handleStepInputEnter(event)" oninput="this.classList.remove('input-error')"></div>`;
 }
 
 function inputVectorHTML(id, n, label) {
     let inputs = '';
     for (let i = 0; i < n; i++)
-        inputs += `<input type="text" id="${id}-${i}" autocomplete="off" class="vec-input">`;
+        inputs += `<input type="text" id="${id}-${i}" autocomplete="off" class="vec-input" onkeydown="handleStepInputEnter(event)" oninput="this.classList.remove('input-error')">`;
     return `<div class="step-field"><label>${label}</label><div class="vec-row">${inputs}</div></div>`;
 }
 
@@ -108,12 +108,27 @@ function inputMatrixHTML(id, rows, cols, prefill, label) {
             if (pf !== null)
                 inputs += `<input type="text" value="${fmtNum(pf)}" disabled class="mat-input prefilled">`;
             else
-                inputs += `<input type="text" id="${id}-${i}-${j}" autocomplete="off" class="mat-input">`;
+                inputs += `<input type="text" id="${id}-${i}-${j}" autocomplete="off" class="mat-input" onkeydown="handleStepInputEnter(event)" oninput="this.classList.remove('input-error')">`;
         }
     return `<div class="step-field"><label>${label}</label>
         <div class="matrix-input-wrapper"><span class="matrix-bracket">[</span>
         <div class="matrix-input-grid" style="grid-template-columns:repeat(${cols},1fr)">${inputs}</div>
         <span class="matrix-bracket">]</span></div></div>`;
+}
+
+function handleStepInputEnter(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const area = document.getElementById('decomp-problem-area');
+    const inputs = Array.from(area.querySelectorAll('input:not([disabled])'));
+    const idx = inputs.indexOf(e.target);
+    if (idx >= 0 && idx < inputs.length - 1) {
+        inputs[idx + 1].focus();
+        inputs[idx + 1].select();
+    } else {
+        area.querySelector('.check-btn')?.click();
+    }
 }
 
 function isApproxScalarMult(v1, v2, tol) {
@@ -161,6 +176,9 @@ function checkCurrentStep() {
     const step = wizardState.steps[wizardState.currentStep];
     const result = step.validate();
     const fb = document.getElementById('step-feedback');
+    const area = document.getElementById('decomp-problem-area');
+
+    area.querySelectorAll('input.input-error').forEach(el => el.classList.remove('input-error'));
 
     const elapsed = (Date.now() - wizardState.stepStart) / 1000;
     const topicNames = { lu: 'LU Decomposition', qr: 'QR Decomposition', svd: 'SVD', matpow: 'Matrix Power' };
@@ -169,8 +187,12 @@ function checkCurrentStep() {
         fb.textContent = (result.message || 'Correct!') + ` (${elapsed.toFixed(1)}s)`;
         fb.className = 'feedback correct';
     } else {
-        fb.innerHTML = result.message;
+        fb.innerHTML = result.message || 'Not quite — check the highlighted fields.';
         fb.className = 'feedback wrong';
+        (result.wrongIds || []).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('input-error');
+        });
     }
     decompScores[wizardState.type].t++;
     recordResult(topicNames[wizardState.type], result.correct, parseFloat(elapsed.toFixed(1)));
@@ -246,16 +268,16 @@ function buildLUFullMatrixStep(A, L, U) {
         validate: () => {
             const Lv = readMatrixPF('lu-L', n, n, Lpf);
             const Uv = readMatrixPF('lu-U', n, n, Upf);
-            let errs = [];
+            let wrongIds = [];
             for (let i = 0; i < n; i++)
                 for (let j = 0; j < n; j++) {
                     if (Lpf[i][j] === null && !approxEq(Lv[i][j], L[i][j], 0.01))
-                        errs.push(`L${i + 1}${j + 1} = ${fmtNum(L[i][j])}`);
+                        wrongIds.push(`lu-L-${i}-${j}`);
                     if (Upf[i][j] === null && !approxEq(Uv[i][j], U[i][j], 0.01))
-                        errs.push(`U${i + 1}${j + 1} = ${fmtNum(U[i][j])}`);
+                        wrongIds.push(`lu-U-${i}-${j}`);
                 }
-            if (errs.length === 0) return { correct: true, message: 'A = LU' };
-            return { correct: false, message: errs.join('<br>') };
+            if (wrongIds.length === 0) return { correct: true, message: 'A = LU' };
+            return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
         }
     }];
 }
@@ -433,7 +455,7 @@ function generateQR(n) {
     }
 
     const Qmat = A.map((_, i) => qCols.map(col => col[i]));
-    const steps = buildQRFullMatrixStep(A, Qmat, R);
+    const steps = n === 2 ? buildQR2(A, Qmat, R, qCols) : buildQR3(A, Qmat, R, qCols);
     const summary = () => `<div class="summary-matrices">
         ${renderMat(A, 'A =')}${renderMat(Qmat, 'Q =')}${renderMat(R, 'R =')}
         <div class="verify-msg">A = QR ✓</div></div>`;
@@ -480,78 +502,85 @@ function buildQR2(A, Q, R, qCols) {
     return [
         {
             content: `${renderMat(A, 'A =')}
-                <div class="step-instruction">Gram-Schmidt step 1: Compute the norm of column 1.<br>
+                <div class="step-instruction">QR splits A into an orthonormal basis Q and the coefficients R needed to rebuild A from it. We build Q one column at a time with Gram-Schmidt.<br><br>
+                <b>Why:</b> before we can turn a₁ into a unit vector, we need its length.<br>
                 r₁₁ = ‖a₁‖ = ‖[${a1.map(fmtNum).join(', ')}]‖</div>
                 ${inputScalarHTML('qr-r11', 'r₁₁ =')}`,
             validate: () => {
                 const v = readScalar('qr-r11');
                 if (approxEq(v, r11, tol)) return { correct: true, message: `r₁₁ = ${fmtNum(r11)}` };
-                return { correct: false, message: `r₁₁ = ‖a₁‖ = ${fmtNum(r11)}` };
+                return { correct: false, message: `Not quite — recheck the highlighted field.`, wrongIds: ['qr-r11'] };
             }
         },
         {
             content: `${renderMat(A, 'A =')}
-                <div class="step-instruction">Compute q₁ = a₁ / r₁₁ = a₁ / ${fmtNum(r11)}${hint}</div>
+                <div class="step-instruction"><b>Why:</b> dividing a₁ by its own length rescales it to length 1 — that's q₁, the first orthonormal direction.<br>
+                q₁ = a₁ / r₁₁ = a₁ / ${fmtNum(r11)}${hint}</div>
                 ${inputVectorHTML('qr-q1', 2, 'q₁ =')}`,
             validate: () => {
                 const v = readVector('qr-q1', 2);
-                if (v.every((x, i) => approxEq(x, q1[i], tol))) return { correct: true };
-                return { correct: false, message: `q₁ = [${q1.map(fmtNum).join(', ')}]` };
+                const wrongIds = v.map((x, i) => approxEq(x, q1[i], tol) ? null : `qr-q1-${i}`).filter(Boolean);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: `Not quite — recheck the highlighted field.`, wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Compute r₁₂ = q₁ᵀ · a₂<br>
-                q₁ = [${q1.map(fmtNum).join(', ')}], a₂ = [${a2.map(fmtNum).join(', ')}]</div>
+            content: `<div class="step-instruction"><b>Why:</b> before we can make a₂ orthogonal to q₁, we need to know how much of a₂ already points along q₁ — that's the projection r₁₂.<br>
+                r₁₂ = q₁ᵀ · a₂, with q₁ = [${q1.map(fmtNum).join(', ')}], a₂ = [${a2.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r12', 'r₁₂ =')}`,
             validate: () => {
                 const v = readScalar('qr-r12');
                 if (approxEq(v, r12, tol)) return { correct: true, message: `r₁₂ = ${fmtNum(r12)}` };
-                return { correct: false, message: `r₁₂ = ${fmtNum(r12)}` };
+                return { correct: false, message: `Not quite — recheck the highlighted field.`, wrongIds: ['qr-r12'] };
             }
         },
         {
-            content: `<div class="step-instruction">Orthogonalize: a₂' = a₂ − r₁₂·q₁<br>
-                a₂' = [${a2.map(fmtNum).join(', ')}] − ${fmtNum(r12)}·[${q1.map(fmtNum).join(', ')}]</div>
+            content: `<div class="step-instruction"><b>Why:</b> subtracting off that projection removes the part of a₂ parallel to q₁, leaving a vector perpendicular to it — the raw material for q₂.<br>
+                a₂' = a₂ − r₁₂·q₁ = [${a2.map(fmtNum).join(', ')}] − ${fmtNum(r12)}·[${q1.map(fmtNum).join(', ')}]</div>
                 ${inputVectorHTML('qr-a2p', 2, "a₂' =")}`,
             validate: () => {
                 const v = readVector('qr-a2p', 2);
-                if (v.every((x, i) => approxEq(x, a2p[i], tol))) return { correct: true };
-                return { correct: false, message: `a₂' = [${a2p.map(fmtNum).join(', ')}]` };
+                const wrongIds = v.map((x, i) => approxEq(x, a2p[i], tol) ? null : `qr-a2p-${i}`).filter(Boolean);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: `Not quite — recheck the highlighted field.`, wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Compute r₂₂ = ‖a₂'‖ where a₂' = [${a2p.map(fmtNum).join(', ')}]</div>
+            content: `<div class="step-instruction"><b>Why:</b> just like with column 1, we need a₂''s length before we can normalize it.<br>
+                r₂₂ = ‖a₂'‖ where a₂' = [${a2p.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r22', 'r₂₂ =')}`,
             validate: () => {
                 const v = readScalar('qr-r22');
                 if (approxEq(v, r22, tol)) return { correct: true, message: `r₂₂ = ${fmtNum(r22)}` };
-                return { correct: false, message: `r₂₂ = ${fmtNum(r22)}` };
+                return { correct: false, message: `Not quite — recheck the highlighted field.`, wrongIds: ['qr-r22'] };
             }
         },
         {
-            content: `<div class="step-instruction">Compute q₂ = a₂' / r₂₂ = [${a2p.map(fmtNum).join(', ')}] / ${fmtNum(r22)}${hint}</div>
+            content: `<div class="step-instruction"><b>Why:</b> dividing a₂' by its length gives the second orthonormal direction, completing Q.<br>
+                q₂ = a₂' / r₂₂ = [${a2p.map(fmtNum).join(', ')}] / ${fmtNum(r22)}${hint}</div>
                 ${inputVectorHTML('qr-q2', 2, 'q₂ =')}`,
             validate: () => {
                 const v = readVector('qr-q2', 2);
-                if (v.every((x, i) => approxEq(x, q2[i], tol))) return { correct: true };
-                return { correct: false, message: `q₂ = [${q2.map(fmtNum).join(', ')}]` };
+                const wrongIds = v.map((x, i) => approxEq(x, q2[i], tol) ? null : `qr-q2-${i}`).filter(Boolean);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: `Not quite — recheck the highlighted field.`, wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Write the final Q and R matrices:${hint}</div>
+            content: `<div class="step-instruction"><b>Why:</b> Q is just the orthonormal columns you built, and R collects the projection coefficients — together A = QR.${hint}</div>
                 ${inputMatrixHTML('qr-Q', 2, 2, [[null,null],[null,null]], 'Q =')}
                 ${inputMatrixHTML('qr-R', 2, 2, [[null,null],[0,null]], 'R =')}`,
             validate: () => {
                 const Qv = readMatrixPF('qr-Q', 2, 2, [[null,null],[null,null]]);
                 const Rv = readMatrixPF('qr-R', 2, 2, [[null,null],[0,null]]);
-                let errs = [];
+                let wrongIds = [];
                 for (let i = 0; i < 2; i++)
                     for (let j = 0; j < 2; j++) {
-                        if (!approxEq(Qv[i][j], Q[i][j], tol)) errs.push(`Q${i+1}${j+1} = ${fmtNum(Q[i][j])}`);
-                        if (!(i > j) && !approxEq(Rv[i][j], R[i][j], tol)) errs.push(`R${i+1}${j+1} = ${fmtNum(R[i][j])}`);
+                        if (!approxEq(Qv[i][j], Q[i][j], tol)) wrongIds.push(`qr-Q-${i}-${j}`);
+                        if (!(i > j) && !approxEq(Rv[i][j], R[i][j], tol)) wrongIds.push(`qr-R-${i}-${j}`);
                     }
-                if (errs.length === 0) return { correct: true, message: 'A = QR ✓' };
-                return { correct: false, message: errs.join('<br>') };
+                if (wrongIds.length === 0) return { correct: true, message: 'A = QR ✓' };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
             }
         }
     ];
@@ -568,67 +597,74 @@ function buildQR3(A, Q, R, qCols) {
     return [
         {
             content: `${renderMat(A, 'A =')}
-                <div class="step-instruction">Compute r₁₁ = ‖a₁‖ and q₁ = a₁/r₁₁${hint}</div>
-                ${inputScalarHTML('qr-r11', 'r₁₁ =')}
-                ${inputVectorHTML('qr-q1', 3, 'q₁ =')}`,
+                <div class="step-instruction">QR splits A into an orthonormal basis Q and the coefficients R needed to rebuild A. We build Q one column at a time with Gram-Schmidt.<br><br>
+                <b>Why:</b> normalizing a₁ by its own length gives the first orthonormal direction q₁.${hint}</div>
+                ${inputScalarHTML('qr-r11', 'r₁₁ = ‖a₁‖ =')}
+                ${inputVectorHTML('qr-q1', 3, 'q₁ = a₁/r₁₁ =')}`,
             validate: () => {
                 const r = readScalar('qr-r11'), q = readVector('qr-q1', 3);
-                let ok = approxEq(r, R[0][0], tol) && q.every((x, i) => approxEq(x, q1[i], tol));
-                if (ok) return { correct: true };
-                return { correct: false, message: `r₁₁ = ${fmtNum(R[0][0])}, q₁ = [${q1.map(fmtNum).join(', ')}]` };
+                let wrongIds = [];
+                if (!approxEq(r, R[0][0], tol)) wrongIds.push('qr-r11');
+                q.forEach((x, i) => { if (!approxEq(x, q1[i], tol)) wrongIds.push(`qr-q1-${i}`); });
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted fields.', wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Compute projections onto q₁:<br>
+            content: `<div class="step-instruction"><b>Why:</b> before we can orthogonalize a₂ and a₃ against q₁, we need to know how much of each already points along q₁.<br>
                 q₁ = [${q1.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r12', 'r₁₂ = q₁ᵀa₂ =')}
                 ${inputScalarHTML('qr-r13', 'r₁₃ = q₁ᵀa₃ =')}`,
             validate: () => {
                 const r12 = readScalar('qr-r12'), r13 = readScalar('qr-r13');
-                let ok = approxEq(r12, R[0][1], tol) && approxEq(r13, R[0][2], tol);
-                if (ok) return { correct: true };
-                return { correct: false, message: `r₁₂ = ${fmtNum(R[0][1])}, r₁₃ = ${fmtNum(R[0][2])}` };
+                let wrongIds = [];
+                if (!approxEq(r12, R[0][1], tol)) wrongIds.push('qr-r12');
+                if (!approxEq(r13, R[0][2], tol)) wrongIds.push('qr-r13');
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted fields.', wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Orthogonalize a₂: a₂' = a₂ − r₁₂·q₁<br>
-                Then r₂₂ = ‖a₂'‖ and q₂ = a₂'/r₂₂${hint}</div>
+            content: `<div class="step-instruction"><b>Why:</b> subtracting the projection removes the part of a₂ parallel to q₁, leaving a vector perpendicular to it; normalizing that gives q₂.<br>
+                a₂' = a₂ − r₁₂·q₁, then r₂₂ = ‖a₂'‖ and q₂ = a₂'/r₂₂${hint}</div>
                 ${inputVectorHTML('qr-a2p', 3, "a₂' =")}
                 ${inputScalarHTML('qr-r22', 'r₂₂ =')}
                 ${inputVectorHTML('qr-q2', 3, 'q₂ =')}`,
             validate: () => {
                 const ap = readVector('qr-a2p', 3), r22 = readScalar('qr-r22'), q = readVector('qr-q2', 3);
-                let ok = ap.every((x, i) => approxEq(x, a2p[i], tol))
-                    && approxEq(r22, R[1][1], tol)
-                    && q.every((x, i) => approxEq(x, q2[i], tol));
-                if (ok) return { correct: true };
-                return { correct: false, message: `a₂' = [${a2p.map(fmtNum).join(', ')}]<br>r₂₂ = ${fmtNum(R[1][1])}<br>q₂ = [${q2.map(fmtNum).join(', ')}]` };
+                let wrongIds = [];
+                ap.forEach((x, i) => { if (!approxEq(x, a2p[i], tol)) wrongIds.push(`qr-a2p-${i}`); });
+                if (!approxEq(r22, R[1][1], tol)) wrongIds.push('qr-r22');
+                q.forEach((x, i) => { if (!approxEq(x, q2[i], tol)) wrongIds.push(`qr-q2-${i}`); });
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted fields.', wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Compute r₂₃ = q₂ᵀa₃<br>
+            content: `<div class="step-instruction"><b>Why:</b> before we can orthogonalize a₃ against q₂ (it's already being orthogonalized against q₁ next step), we need its projection onto q₂.<br>
                 q₂ = [${q2.map(fmtNum).join(', ')}], a₃ = [${a3.map(fmtNum).join(', ')}]</div>
-                ${inputScalarHTML('qr-r23', 'r₂₃ =')}`,
+                ${inputScalarHTML('qr-r23', 'r₂₃ = q₂ᵀa₃ =')}`,
             validate: () => {
                 const v = readScalar('qr-r23');
                 if (approxEq(v, R[1][2], tol)) return { correct: true };
-                return { correct: false, message: `r₂₃ = ${fmtNum(R[1][2])}` };
+                return { correct: false, message: 'Not quite — recheck the highlighted field.', wrongIds: ['qr-r23'] };
             }
         },
         {
-            content: `<div class="step-instruction">Orthogonalize a₃: a₃' = a₃ − r₁₃·q₁ − r₂₃·q₂<br>
-                r₁₃ = ${fmtNum(R[0][2])}, r₂₃ = ${fmtNum(R[1][2])}<br>
+            content: `<div class="step-instruction"><b>Why:</b> subtracting both projections removes everything a₃ shares with q₁ and q₂, leaving the direction that completes the orthonormal basis: q₃.<br>
+                a₃' = a₃ − r₁₃·q₁ − r₂₃·q₂ (r₁₃ = ${fmtNum(R[0][2])}, r₂₃ = ${fmtNum(R[1][2])})<br>
                 Then r₃₃ = ‖a₃'‖ and q₃ = a₃'/r₃₃${hint}</div>
                 ${inputVectorHTML('qr-a3p', 3, "a₃' =")}
                 ${inputScalarHTML('qr-r33', 'r₃₃ =')}
                 ${inputVectorHTML('qr-q3', 3, 'q₃ =')}`,
             validate: () => {
                 const ap = readVector('qr-a3p', 3), r33 = readScalar('qr-r33'), q = readVector('qr-q3', 3);
-                let ok = ap.every((x, i) => approxEq(x, a3p[i], tol))
-                    && approxEq(r33, R[2][2], tol)
-                    && q.every((x, i) => approxEq(x, q3[i], tol));
-                if (ok) return { correct: true };
-                return { correct: false, message: `a₃' = [${a3p.map(fmtNum).join(', ')}]<br>r₃₃ = ${fmtNum(R[2][2])}<br>q₃ = [${q3.map(fmtNum).join(', ')}]` };
+                let wrongIds = [];
+                ap.forEach((x, i) => { if (!approxEq(x, a3p[i], tol)) wrongIds.push(`qr-a3p-${i}`); });
+                if (!approxEq(r33, R[2][2], tol)) wrongIds.push('qr-r33');
+                q.forEach((x, i) => { if (!approxEq(x, q3[i], tol)) wrongIds.push(`qr-q3-${i}`); });
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted fields.', wrongIds };
             }
         }
     ];
@@ -689,90 +725,88 @@ function generateSVD(size) {
     const Umat = [[uCols[0][0], uCols[1][0]], [uCols[0][1], uCols[1][1]]];
     const Smat = [[sortedSigma[0], 0], [0, sortedSigma[1]]];
 
-    const matrixSteps = buildSVDFullMatrixStep(A, Umat, Smat, Vmat, sortedSigma);
-    const matrixSummary = () => `<div class="summary-matrices">
-        ${renderMat(A, 'A =')}${renderMat(Umat, 'U =')}
-        ${renderMat(Smat, 'Sigma =')}${renderMat(Vmat, 'V =')}
-        <div class="verify-msg">A = U Sigma V^T</div></div>`;
-    startWizard('svd', matrixSteps, matrixSummary);
-    return;
-
     const tol = 0.1;
     const hint = ' (Round to 2 decimals, or use fractions like 3/5)';
 
     const steps = [
         {
             content: `${renderMat(A, 'A =')}
-                <div class="step-instruction">Step 1: Compute AᵀA</div>
+                <div class="step-instruction">SVD writes A = UΣVᵀ, where V holds directions A stretches purely (no rotation), Σ holds the stretch amounts, and U holds where those directions land after A is applied.<br><br>
+                <b>Why:</b> we start from AᵀA because its eigenvectors turn out to be exactly those pure-stretch directions (V), and its eigenvalues are the squared stretch amounts.<br>
+                Step 1: Compute AᵀA</div>
                 ${inputMatrixHTML('svd-ata', 2, 2, [[null,null],[null,null]], 'AᵀA =')}`,
             validate: () => {
                 const M = readMatrixPF('svd-ata', 2, 2, [[null,null],[null,null]]);
-                let ok = true;
+                let wrongIds = [];
                 for (let i = 0; i < 2; i++)
                     for (let j = 0; j < 2; j++)
-                        if (!approxEq(M[i][j], AtA[i][j], 0.5)) ok = false;
-                if (ok) return { correct: true };
-                return { correct: false, message: `AᵀA = ${matStr(AtA)}` };
+                        if (!approxEq(M[i][j], AtA[i][j], 0.5)) wrongIds.push(`svd-ata-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
             }
         },
         {
             content: `${renderMat(AtA, 'AᵀA =')}
-                <div class="step-instruction">Step 2: Find the eigenvalues of AᵀA<br>
+                <div class="step-instruction"><b>Why:</b> these eigenvalues measure how much A stretches (squared) along each of the pure-stretch directions we're about to find.<br>
+                Step 2: Find the eigenvalues of AᵀA<br>
                 det(AᵀA − λI) = 0<br>
                 λ² − ${fmtNum(trace)}λ + ${fmtNum(det)} = 0</div>
                 ${inputScalarHTML('svd-l1', 'λ₁ (larger) =')}
                 ${inputScalarHTML('svd-l2', 'λ₂ (smaller) =')}`,
             validate: () => {
                 const l1 = readScalar('svd-l1'), l2 = readScalar('svd-l2');
-                if (approxEq(l1, eigvals[0], 0.5) && approxEq(l2, eigvals[1], 0.5))
-                    return { correct: true, message: `λ₁ = ${fmtNum(eigvals[0])}, λ₂ = ${fmtNum(eigvals[1])}` };
-                return { correct: false, message: `λ₁ = ${fmtNum(eigvals[0])}, λ₂ = ${fmtNum(eigvals[1])}` };
+                let wrongIds = [];
+                if (!approxEq(l1, eigvals[0], 0.5)) wrongIds.push('svd-l1');
+                if (!approxEq(l2, eigvals[1], 0.5)) wrongIds.push('svd-l2');
+                if (wrongIds.length === 0) return { correct: true, message: `λ₁ = ${fmtNum(eigvals[0])}, λ₂ = ${fmtNum(eigvals[1])}` };
+                return { correct: false, message: 'Not quite — recheck the highlighted fields.', wrongIds };
             }
         },
         {
-            content: `<div class="step-instruction">Step 3: Singular values σᵢ = √λᵢ</div>
+            content: `<div class="step-instruction"><b>Why:</b> the eigenvalues are squared stretch amounts, so taking the square root gives the actual singular values — the entries of Σ.<br>
+                Step 3: Singular values σᵢ = √λᵢ</div>
                 ${inputScalarHTML('svd-s1', 'σ₁ = √' + fmtNum(eigvals[0]) + ' =')}
                 ${inputScalarHTML('svd-s2', 'σ₂ = √' + fmtNum(eigvals[1]) + ' =')}`,
             validate: () => {
                 const s1 = readScalar('svd-s1'), s2 = readScalar('svd-s2');
-                if (approxEq(s1, sortedSigma[0], tol) && approxEq(s2, sortedSigma[1], tol))
-                    return { correct: true };
-                return { correct: false, message: `σ₁ = ${fmtNum(sortedSigma[0])}, σ₂ = ${fmtNum(sortedSigma[1])}` };
+                let wrongIds = [];
+                if (!approxEq(s1, sortedSigma[0], tol)) wrongIds.push('svd-s1');
+                if (!approxEq(s2, sortedSigma[1], tol)) wrongIds.push('svd-s2');
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted fields.', wrongIds };
             }
         },
         {
             content: `${renderMat(AtA, 'AᵀA =')}
-                <div class="step-instruction">Step 4: Find eigenvectors of AᵀA (columns of V)${hint}<br>
+                <div class="step-instruction"><b>Why:</b> the eigenvectors of AᵀA are the pure-stretch directions themselves — these become the columns of V.${hint}<br>
+                Step 4: Find eigenvectors of AᵀA (columns of V)<br>
                 Any normalized eigenvector is accepted.</div>
                 ${inputVectorHTML('svd-v1', 2, 'v₁ (for λ₁ = ' + fmtNum(eigvals[0]) + '):')}
                 ${inputVectorHTML('svd-v2', 2, 'v₂ (for λ₂ = ' + fmtNum(eigvals[1]) + '):')}`,
             validate: () => {
                 const v1 = readVector('svd-v1', 2), v2 = readVector('svd-v2', 2);
-                let errs = [];
-                if (!isApproxScalarMult(v1, eigvecs[0], 0.15))
-                    errs.push(`v₁ should be ±[${eigvecs[0].map(fmtNum).join(', ')}]`);
-                if (!isApproxScalarMult(v2, eigvecs[1], 0.15))
-                    errs.push(`v₂ should be ±[${eigvecs[1].map(fmtNum).join(', ')}]`);
-                if (errs.length === 0) return { correct: true };
-                return { correct: false, message: errs.join('<br>') };
+                let wrongIds = [];
+                if (!isApproxScalarMult(v1, eigvecs[0], 0.15)) wrongIds.push('svd-v1-0', 'svd-v1-1');
+                if (!isApproxScalarMult(v2, eigvecs[1], 0.15)) wrongIds.push('svd-v2-0', 'svd-v2-1');
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted vector(s).', wrongIds };
             }
         },
         {
             content: `${renderMat(A, 'A =')}
-                <div class="step-instruction">Step 5: Compute U columns: uᵢ = (1/σᵢ)·A·vᵢ${hint}<br>
+                <div class="step-instruction"><b>Why:</b> mapping each pure-stretch direction vᵢ through A and rescaling by 1/σᵢ gives the corresponding output direction — the columns of U.${hint}<br>
+                Step 5: Compute U columns: uᵢ = (1/σᵢ)·A·vᵢ<br>
                 σ₁ = ${fmtNum(sortedSigma[0])}, v₁ = [${eigvecs[0].map(fmtNum).join(', ')}]<br>
                 σ₂ = ${fmtNum(sortedSigma[1])}, v₂ = [${eigvecs[1].map(fmtNum).join(', ')}]</div>
                 ${inputVectorHTML('svd-u1', 2, 'u₁ =')}
                 ${inputVectorHTML('svd-u2', 2, 'u₂ =')}`,
             validate: () => {
                 const u1 = readVector('svd-u1', 2), u2 = readVector('svd-u2', 2);
-                let errs = [];
-                if (!isApproxScalarMult(u1, uCols[0], 0.15))
-                    errs.push(`u₁ = [${uCols[0].map(fmtNum).join(', ')}]`);
-                if (!isApproxScalarMult(u2, uCols[1], 0.15))
-                    errs.push(`u₂ = [${uCols[1].map(fmtNum).join(', ')}]`);
-                if (errs.length === 0) return { correct: true };
-                return { correct: false, message: errs.join('<br>') };
+                let wrongIds = [];
+                if (!isApproxScalarMult(u1, uCols[0], 0.15)) wrongIds.push('svd-u1-0', 'svd-u1-1');
+                if (!isApproxScalarMult(u2, uCols[1], 0.15)) wrongIds.push('svd-u2-0', 'svd-u2-1');
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Not quite — recheck the highlighted vector(s).', wrongIds };
             }
         }
     ];
@@ -900,7 +934,7 @@ function generateMatPow(n) {
                 const ok = (approxEq(l1, lam1, 0.01) && approxEq(l2, lam2, 0.01)) ||
                            (approxEq(l1, lam2, 0.01) && approxEq(l2, lam1, 0.01));
                 if (ok) return { correct: true, message: `λ₁ = ${lam1}, λ₂ = ${lam2}` };
-                return { correct: false, message: `λ₁ = ${lam1}, λ₂ = ${lam2}` };
+                return { correct: false, message: `λ₁ = ${lam1}, λ₂ = ${lam2}`, wrongIds: ['mp-l1', 'mp-l2'] };
             }
         },
         {
@@ -912,13 +946,17 @@ function generateMatPow(n) {
                 ${inputVectorHTML('mp-v2', 2, 'v₂ (for λ = ' + lam2 + '):')}`,
             validate: () => {
                 const uv1 = readVector('mp-v1', 2), uv2 = readVector('mp-v2', 2);
-                let errs = [];
-                if (!isApproxScalarMult(uv1, v1, 0.15))
+                let errs = [], wrongIds = [];
+                if (!isApproxScalarMult(uv1, v1, 0.15)) {
                     errs.push(`v₁ should be a multiple of [${v1.join(', ')}]`);
-                if (!isApproxScalarMult(uv2, v2, 0.15))
+                    wrongIds.push('mp-v1-0', 'mp-v1-1');
+                }
+                if (!isApproxScalarMult(uv2, v2, 0.15)) {
                     errs.push(`v₂ should be a multiple of [${v2.join(', ')}]`);
+                    wrongIds.push('mp-v2-0', 'mp-v2-1');
+                }
                 if (errs.length === 0) return { correct: true };
-                return { correct: false, message: errs.join('<br>') };
+                return { correct: false, message: errs.join('<br>'), wrongIds };
             }
         },
         {
@@ -930,13 +968,13 @@ function generateMatPow(n) {
             validate: () => {
                 const Dv = readMatrixPF('mp-D', 2, 2, [[null, 0], [0, null]]);
                 const Dnv = readMatrixPF('mp-Dn', 2, 2, [[null, 0], [0, null]]);
-                let errs = [];
-                if (!approxEq(Dv[0][0], lam1, 0.01) || !approxEq(Dv[1][1], lam2, 0.01))
-                    errs.push(`D = diag(${lam1}, ${lam2})`);
-                if (!approxEq(Dnv[0][0], Dn[0][0], 0.5) || !approxEq(Dnv[1][1], Dn[1][1], 0.5))
-                    errs.push(`D${sup} = diag(${fmtNum(Dn[0][0])}, ${fmtNum(Dn[1][1])})`);
-                if (errs.length === 0) return { correct: true };
-                return { correct: false, message: errs.join('<br>') };
+                let wrongIds = [];
+                if (!approxEq(Dv[0][0], lam1, 0.01)) wrongIds.push('mp-D-0-0');
+                if (!approxEq(Dv[1][1], lam2, 0.01)) wrongIds.push('mp-D-1-1');
+                if (!approxEq(Dnv[0][0], Dn[0][0], 0.5)) wrongIds.push('mp-Dn-0-0');
+                if (!approxEq(Dnv[1][1], Dn[1][1], 0.5)) wrongIds.push('mp-Dn-1-1');
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
             }
         },
         {
@@ -946,12 +984,12 @@ function generateMatPow(n) {
                 ${inputMatrixHTML('mp-Pinv', 2, 2, [[null, null], [null, null]], 'P⁻¹ =')}`,
             validate: () => {
                 const Piv = readMatrixPF('mp-Pinv', 2, 2, [[null, null], [null, null]]);
-                let ok = true;
+                let wrongIds = [];
                 for (let i = 0; i < 2; i++)
                     for (let j = 0; j < 2; j++)
-                        if (!approxEq(Piv[i][j], Pinv[i][j], tol)) ok = false;
-                if (ok) return { correct: true };
-                return { correct: false, message: `P⁻¹ = ${matStr(Pinv)}` };
+                        if (!approxEq(Piv[i][j], Pinv[i][j], tol)) wrongIds.push(`mp-Pinv-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
             }
         },
         {
@@ -962,12 +1000,12 @@ function generateMatPow(n) {
                 ${inputMatrixHTML('mp-An', 2, 2, [[null, null], [null, null]], 'A' + sup + ' =')}`,
             validate: () => {
                 const Anv = readMatrixPF('mp-An', 2, 2, [[null, null], [null, null]]);
-                let ok = true;
+                let wrongIds = [];
                 for (let i = 0; i < 2; i++)
                     for (let j = 0; j < 2; j++)
-                        if (!approxEq(Anv[i][j], An[i][j], 0.5)) ok = false;
-                if (ok) return { correct: true, message: `A${sup} = PD${sup}P⁻¹ ✓` };
-                return { correct: false, message: `A${sup} = ${matStr(An)}` };
+                        if (!approxEq(Anv[i][j], An[i][j], 0.5)) wrongIds.push(`mp-An-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true, message: `A${sup} = PD${sup}P⁻¹ ✓` };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
             }
         }
     ];

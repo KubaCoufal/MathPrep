@@ -507,6 +507,20 @@ h2 {
     border-color: #334155;
 }
 
+.scalar-input.input-error,
+.vec-input.input-error,
+.mat-input.input-error {
+    border-color: #ef4444;
+    background: #3a1414;
+    animation: input-error-shake 0.25s;
+}
+
+@keyframes input-error-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+}
+
 .mat-label {
     color: #94a3b8;
     font-size: 0.9rem;
