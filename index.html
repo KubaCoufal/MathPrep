@@ -61,6 +61,21 @@
                     <span class="menu-label">Matrix Power</span>
                     <span class="menu-desc">Compute Aⁿ via PDP⁻¹ diagonalization</span>
                 </button>
+                <button class="menu-btn" onclick="startInverse()">
+                    <span class="menu-icon">A⁻¹</span>
+                    <span class="menu-label">Matrix Inverse</span>
+                    <span class="menu-desc">Compute the inverse via determinant and adjugate</span>
+                </button>
+                <button class="menu-btn" onclick="startTranspose()">
+                    <span class="menu-icon">Aᵀ</span>
+                    <span class="menu-label">Matrix Transpose</span>
+                    <span class="menu-desc">Flip a matrix across its main diagonal</span>
+                </button>
+                <button class="menu-btn" onclick="startMatMul()">
+                    <span class="menu-icon">A×B</span>
+                    <span class="menu-label">Matrix Multiplication</span>
+                    <span class="menu-desc">Multiply matrices one entry at a time</span>
+                </button>
                 <button class="menu-btn" onclick="startLP()">
                     <span class="menu-icon">LP</span>
                     <span class="menu-label">Linear Programming</span>

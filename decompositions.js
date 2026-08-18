@@ -1,5 +1,5 @@
 let wizardState = null;
-let decompScores = { lu: { c: 0, t: 0 }, qr: { c: 0, t: 0 }, svd: { c: 0, t: 0 }, matpow: { c: 0, t: 0 } };
+let decompScores = { lu: { c: 0, t: 0 }, qr: { c: 0, t: 0 }, svd: { c: 0, t: 0 }, matpow: { c: 0, t: 0 }, inverse: { c: 0, t: 0 }, transpose: { c: 0, t: 0 }, matmul: { c: 0, t: 0 } };
 let currentDecompType = 'lu';
 
 function mMul(A, B) {
@@ -86,6 +86,82 @@ function renderMat(m, label) {
         <span class="matrix-bracket">[</span>
         <div class="matrix-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
         <span class="matrix-bracket">]</span></div></div>`;
+}
+
+function renderMatProgress(M, rows, cols, state, label) {
+    let cells = '';
+    for (let i = 0; i < rows; i++)
+        for (let j = 0; j < cols; j++) {
+            const s = state[i][j];
+            const cls = s === 'current' ? 'cell-current' : s === 'pending' ? 'cell-pending' : '';
+            const content = s === 'known' ? fmtNum(M[i][j]) : '?';
+            cells += `<span class="${cls}">${content}</span>`;
+        }
+    return `${label ? `<div class="mat-label">${label}</div>` : ''}
+        <div class="matrix-display"><div class="matrix-wrapper">
+        <span class="matrix-bracket">[</span>
+        <div class="matrix-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
+        <span class="matrix-bracket">]</span></div></div>`;
+}
+
+function renderMatCellsHighlighted(M, rows, cols, highlightFn, label) {
+    let cells = '';
+    for (let i = 0; i < rows; i++)
+        for (let j = 0; j < cols; j++) {
+            const cls = highlightFn(i, j) ? 'cell-current' : '';
+            cells += `<span class="${cls}">${fmtNum(M[i][j])}</span>`;
+        }
+    return `${label ? `<div class="mat-label">${label}</div>` : ''}
+        <div class="matrix-display"><div class="matrix-wrapper">
+        <span class="matrix-bracket">[</span>
+        <div class="matrix-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
+        <span class="matrix-bracket">]</span></div></div>`;
+}
+
+function renderMatMulProgress(A, B, C, n, curI, curJ, knownMask) {
+    const cState = Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => {
+        if (r === curI && c === curJ) return 'current';
+        return knownMask[r][c] ? 'known' : 'pending';
+    }));
+    return `<div class="summary-matrices">
+        ${renderMatCellsHighlighted(A, n, n, (r, c) => r === curI, 'A =')}
+        ${renderMatCellsHighlighted(B, n, n, (r, c) => c === curJ, 'B =')}
+        ${renderMatProgress(C, n, n, cState, 'C = A×B =')}
+        </div>`;
+}
+
+function renderQRProgress(A, Q, R, n, opts) {
+    const qState = Array.from({ length: n }, () => Array(n).fill('pending'));
+    (opts.qKnownCols || []).forEach(c => { for (let i = 0; i < n; i++) qState[i][c] = 'known'; });
+    (opts.qCurrentCols || []).forEach(c => { for (let i = 0; i < n; i++) qState[i][c] = 'current'; });
+
+    const rState = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i > j ? 'known' : 'pending'));
+    (opts.rKnownCells || []).forEach(([i, j]) => rState[i][j] = 'known');
+    (opts.rCurrentCells || []).forEach(([i, j]) => rState[i][j] = 'current');
+
+    return `<div class="summary-matrices">
+        ${renderMat(A, 'A =')}
+        ${renderMatProgress(Q, n, n, qState, 'Q =')}${renderMatProgress(R, n, n, rState, 'R =')}
+        </div>`;
+}
+
+function renderSVDProgress(topMat, topLabel, Umat, Smat, Vmat, n, opts) {
+    const sState = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 'pending' : 'known'));
+    (opts.sKnown || []).forEach(i => sState[i][i] = 'known');
+    (opts.sCurrent || []).forEach(i => sState[i][i] = 'current');
+
+    const vState = Array.from({ length: n }, () => Array(n).fill('pending'));
+    (opts.vKnownCols || []).forEach(c => { for (let i = 0; i < n; i++) vState[i][c] = 'known'; });
+    (opts.vCurrentCols || []).forEach(c => { for (let i = 0; i < n; i++) vState[i][c] = 'current'; });
+
+    const uState = Array.from({ length: n }, () => Array(n).fill('pending'));
+    (opts.uKnownCols || []).forEach(c => { for (let i = 0; i < n; i++) uState[i][c] = 'known'; });
+    (opts.uCurrentCols || []).forEach(c => { for (let i = 0; i < n; i++) uState[i][c] = 'current'; });
+
+    return `<div class="summary-matrices">
+        ${renderMat(topMat, topLabel)}
+        ${renderMatProgress(Umat, n, n, uState, 'U =')}${renderMatProgress(Smat, n, n, sState, 'Σ =')}${renderMatProgress(Vmat, n, n, vState, 'V =')}
+        </div>`;
 }
 
 function inputScalarHTML(id, label) {
@@ -181,7 +257,7 @@ function checkCurrentStep() {
     area.querySelectorAll('input.input-error').forEach(el => el.classList.remove('input-error'));
 
     const elapsed = (Date.now() - wizardState.stepStart) / 1000;
-    const topicNames = { lu: 'LU Decomposition', qr: 'QR Decomposition', svd: 'SVD', matpow: 'Matrix Power' };
+    const topicNames = { lu: 'LU Decomposition', qr: 'QR Decomposition', svd: 'SVD', matpow: 'Matrix Power', inverse: 'Matrix Inverse', transpose: 'Matrix Transpose', matmul: 'Matrix Multiplication' };
     if (result.correct) {
         decompScores[wizardState.type].c++;
         fb.textContent = (result.message || 'Correct!') + ` (${elapsed.toFixed(1)}s)`;
@@ -223,6 +299,9 @@ function generateDecompProblem() {
     if (currentDecompType === 'lu') generateLU(size);
     else if (currentDecompType === 'qr') generateQR(size);
     else if (currentDecompType === 'matpow') generateMatPow(size);
+    else if (currentDecompType === 'inverse') generateInverse(size);
+    else if (currentDecompType === 'transpose') generateTranspose(size);
+    else if (currentDecompType === 'matmul') generateMatMul(size);
     else generateSVD(size);
 }
 
@@ -501,7 +580,7 @@ function buildQR2(A, Q, R, qCols) {
 
     return [
         {
-            content: `${renderMat(A, 'A =')}
+            content: `${renderQRProgress(A, Q, R, 2, { rCurrentCells: [[0,0]] })}
                 <div class="step-instruction">QR splits A into an orthonormal basis Q and the coefficients R needed to rebuild A from it. We build Q one column at a time with Gram-Schmidt.<br><br>
                 <b>Why:</b> before we can turn a₁ into a unit vector, we need its length.<br>
                 r₁₁ = ‖a₁‖ = ‖[${a1.map(fmtNum).join(', ')}]‖</div>
@@ -513,7 +592,7 @@ function buildQR2(A, Q, R, qCols) {
             }
         },
         {
-            content: `${renderMat(A, 'A =')}
+            content: `${renderQRProgress(A, Q, R, 2, { rKnownCells: [[0,0]], qCurrentCols: [0] })}
                 <div class="step-instruction"><b>Why:</b> dividing a₁ by its own length rescales it to length 1 — that's q₁, the first orthonormal direction.<br>
                 q₁ = a₁ / r₁₁ = a₁ / ${fmtNum(r11)}${hint}</div>
                 ${inputVectorHTML('qr-q1', 2, 'q₁ =')}`,
@@ -525,7 +604,8 @@ function buildQR2(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> before we can make a₂ orthogonal to q₁, we need to know how much of a₂ already points along q₁ — that's the projection r₁₂.<br>
+            content: `${renderQRProgress(A, Q, R, 2, { rKnownCells: [[0,0]], qKnownCols: [0], rCurrentCells: [[0,1]] })}
+                <div class="step-instruction"><b>Why:</b> before we can make a₂ orthogonal to q₁, we need to know how much of a₂ already points along q₁ — that's the projection r₁₂.<br>
                 r₁₂ = q₁ᵀ · a₂, with q₁ = [${q1.map(fmtNum).join(', ')}], a₂ = [${a2.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r12', 'r₁₂ =')}`,
             validate: () => {
@@ -535,7 +615,8 @@ function buildQR2(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> subtracting off that projection removes the part of a₂ parallel to q₁, leaving a vector perpendicular to it — the raw material for q₂.<br>
+            content: `${renderQRProgress(A, Q, R, 2, { rKnownCells: [[0,0],[0,1]], qKnownCols: [0] })}
+                <div class="step-instruction"><b>Why:</b> subtracting off that projection removes the part of a₂ parallel to q₁, leaving a vector perpendicular to it — the raw material for q₂.<br>
                 a₂' = a₂ − r₁₂·q₁ = [${a2.map(fmtNum).join(', ')}] − ${fmtNum(r12)}·[${q1.map(fmtNum).join(', ')}]</div>
                 ${inputVectorHTML('qr-a2p', 2, "a₂' =")}`,
             validate: () => {
@@ -546,7 +627,8 @@ function buildQR2(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> just like with column 1, we need a₂''s length before we can normalize it.<br>
+            content: `${renderQRProgress(A, Q, R, 2, { rKnownCells: [[0,0],[0,1]], qKnownCols: [0], rCurrentCells: [[1,1]] })}
+                <div class="step-instruction"><b>Why:</b> just like with column 1, we need a₂''s length before we can normalize it.<br>
                 r₂₂ = ‖a₂'‖ where a₂' = [${a2p.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r22', 'r₂₂ =')}`,
             validate: () => {
@@ -556,7 +638,8 @@ function buildQR2(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> dividing a₂' by its length gives the second orthonormal direction, completing Q.<br>
+            content: `${renderQRProgress(A, Q, R, 2, { rKnownCells: [[0,0],[0,1],[1,1]], qKnownCols: [0], qCurrentCols: [1] })}
+                <div class="step-instruction"><b>Why:</b> dividing a₂' by its length gives the second orthonormal direction, completing Q.<br>
                 q₂ = a₂' / r₂₂ = [${a2p.map(fmtNum).join(', ')}] / ${fmtNum(r22)}${hint}</div>
                 ${inputVectorHTML('qr-q2', 2, 'q₂ =')}`,
             validate: () => {
@@ -567,7 +650,8 @@ function buildQR2(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> Q is just the orthonormal columns you built, and R collects the projection coefficients — together A = QR.${hint}</div>
+            content: `${renderQRProgress(A, Q, R, 2, { qKnownCols: [0, 1], rKnownCells: [[0,0],[0,1],[1,1]] })}
+                <div class="step-instruction"><b>Why:</b> Q is just the orthonormal columns you built, and R collects the projection coefficients — together A = QR.${hint}</div>
                 ${inputMatrixHTML('qr-Q', 2, 2, [[null,null],[null,null]], 'Q =')}
                 ${inputMatrixHTML('qr-R', 2, 2, [[null,null],[0,null]], 'R =')}`,
             validate: () => {
@@ -596,7 +680,7 @@ function buildQR3(A, Q, R, qCols) {
 
     return [
         {
-            content: `${renderMat(A, 'A =')}
+            content: `${renderQRProgress(A, Q, R, 3, { rCurrentCells: [[0,0]], qCurrentCols: [0] })}
                 <div class="step-instruction">QR splits A into an orthonormal basis Q and the coefficients R needed to rebuild A. We build Q one column at a time with Gram-Schmidt.<br><br>
                 <b>Why:</b> normalizing a₁ by its own length gives the first orthonormal direction q₁.${hint}</div>
                 ${inputScalarHTML('qr-r11', 'r₁₁ = ‖a₁‖ =')}
@@ -611,7 +695,8 @@ function buildQR3(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> before we can orthogonalize a₂ and a₃ against q₁, we need to know how much of each already points along q₁.<br>
+            content: `${renderQRProgress(A, Q, R, 3, { rKnownCells: [[0,0]], qKnownCols: [0], rCurrentCells: [[0,1],[0,2]] })}
+                <div class="step-instruction"><b>Why:</b> before we can orthogonalize a₂ and a₃ against q₁, we need to know how much of each already points along q₁.<br>
                 q₁ = [${q1.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r12', 'r₁₂ = q₁ᵀa₂ =')}
                 ${inputScalarHTML('qr-r13', 'r₁₃ = q₁ᵀa₃ =')}`,
@@ -625,7 +710,8 @@ function buildQR3(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> subtracting the projection removes the part of a₂ parallel to q₁, leaving a vector perpendicular to it; normalizing that gives q₂.<br>
+            content: `${renderQRProgress(A, Q, R, 3, { rKnownCells: [[0,0],[0,1],[0,2]], qKnownCols: [0], rCurrentCells: [[1,1]], qCurrentCols: [1] })}
+                <div class="step-instruction"><b>Why:</b> subtracting the projection removes the part of a₂ parallel to q₁, leaving a vector perpendicular to it; normalizing that gives q₂.<br>
                 a₂' = a₂ − r₁₂·q₁, then r₂₂ = ‖a₂'‖ and q₂ = a₂'/r₂₂${hint}</div>
                 ${inputVectorHTML('qr-a2p', 3, "a₂' =")}
                 ${inputScalarHTML('qr-r22', 'r₂₂ =')}
@@ -641,7 +727,8 @@ function buildQR3(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> before we can orthogonalize a₃ against q₂ (it's already being orthogonalized against q₁ next step), we need its projection onto q₂.<br>
+            content: `${renderQRProgress(A, Q, R, 3, { rKnownCells: [[0,0],[0,1],[0,2],[1,1]], qKnownCols: [0,1], rCurrentCells: [[1,2]] })}
+                <div class="step-instruction"><b>Why:</b> before we can orthogonalize a₃ against q₂ (it's already being orthogonalized against q₁ next step), we need its projection onto q₂.<br>
                 q₂ = [${q2.map(fmtNum).join(', ')}], a₃ = [${a3.map(fmtNum).join(', ')}]</div>
                 ${inputScalarHTML('qr-r23', 'r₂₃ = q₂ᵀa₃ =')}`,
             validate: () => {
@@ -651,7 +738,8 @@ function buildQR3(A, Q, R, qCols) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> subtracting both projections removes everything a₃ shares with q₁ and q₂, leaving the direction that completes the orthonormal basis: q₃.<br>
+            content: `${renderQRProgress(A, Q, R, 3, { rKnownCells: [[0,0],[0,1],[0,2],[1,1],[1,2]], qKnownCols: [0,1], rCurrentCells: [[2,2]], qCurrentCols: [2] })}
+                <div class="step-instruction"><b>Why:</b> subtracting both projections removes everything a₃ shares with q₁ and q₂, leaving the direction that completes the orthonormal basis: q₃.<br>
                 a₃' = a₃ − r₁₃·q₁ − r₂₃·q₂ (r₁₃ = ${fmtNum(R[0][2])}, r₂₃ = ${fmtNum(R[1][2])})<br>
                 Then r₃₃ = ‖a₃'‖ and q₃ = a₃'/r₃₃${hint}</div>
                 ${inputVectorHTML('qr-a3p', 3, "a₃' =")}
@@ -730,7 +818,7 @@ function generateSVD(size) {
 
     const steps = [
         {
-            content: `${renderMat(A, 'A =')}
+            content: `${renderSVDProgress(A, 'A =', Umat, Smat, Vmat, 2, {})}
                 <div class="step-instruction">SVD writes A = UΣVᵀ, where V holds directions A stretches purely (no rotation), Σ holds the stretch amounts, and U holds where those directions land after A is applied.<br><br>
                 <b>Why:</b> we start from AᵀA because its eigenvectors turn out to be exactly those pure-stretch directions (V), and its eigenvalues are the squared stretch amounts.<br>
                 Step 1: Compute AᵀA</div>
@@ -746,7 +834,7 @@ function generateSVD(size) {
             }
         },
         {
-            content: `${renderMat(AtA, 'AᵀA =')}
+            content: `${renderSVDProgress(AtA, 'AᵀA =', Umat, Smat, Vmat, 2, {})}
                 <div class="step-instruction"><b>Why:</b> these eigenvalues measure how much A stretches (squared) along each of the pure-stretch directions we're about to find.<br>
                 Step 2: Find the eigenvalues of AᵀA<br>
                 det(AᵀA − λI) = 0<br>
@@ -763,7 +851,8 @@ function generateSVD(size) {
             }
         },
         {
-            content: `<div class="step-instruction"><b>Why:</b> the eigenvalues are squared stretch amounts, so taking the square root gives the actual singular values — the entries of Σ.<br>
+            content: `${renderSVDProgress(AtA, 'AᵀA =', Umat, Smat, Vmat, 2, { sCurrent: [0, 1] })}
+                <div class="step-instruction"><b>Why:</b> the eigenvalues are squared stretch amounts, so taking the square root gives the actual singular values — the entries of Σ.<br>
                 Step 3: Singular values σᵢ = √λᵢ</div>
                 ${inputScalarHTML('svd-s1', 'σ₁ = √' + fmtNum(eigvals[0]) + ' =')}
                 ${inputScalarHTML('svd-s2', 'σ₂ = √' + fmtNum(eigvals[1]) + ' =')}`,
@@ -777,7 +866,7 @@ function generateSVD(size) {
             }
         },
         {
-            content: `${renderMat(AtA, 'AᵀA =')}
+            content: `${renderSVDProgress(AtA, 'AᵀA =', Umat, Smat, Vmat, 2, { sKnown: [0, 1], vCurrentCols: [0, 1] })}
                 <div class="step-instruction"><b>Why:</b> the eigenvectors of AᵀA are the pure-stretch directions themselves — these become the columns of V.${hint}<br>
                 Step 4: Find eigenvectors of AᵀA (columns of V)<br>
                 Any normalized eigenvector is accepted.</div>
@@ -793,7 +882,7 @@ function generateSVD(size) {
             }
         },
         {
-            content: `${renderMat(A, 'A =')}
+            content: `${renderSVDProgress(A, 'A =', Umat, Smat, Vmat, 2, { sKnown: [0, 1], vKnownCols: [0, 1], uCurrentCols: [0, 1] })}
                 <div class="step-instruction"><b>Why:</b> mapping each pure-stretch direction vᵢ through A and rescaling by 1/σᵢ gives the corresponding output direction — the columns of U.${hint}<br>
                 Step 5: Compute U columns: uᵢ = (1/σᵢ)·A·vᵢ<br>
                 σ₁ = ${fmtNum(sortedSigma[0])}, v₁ = [${eigvecs[0].map(fmtNum).join(', ')}]<br>
@@ -877,6 +966,9 @@ function startLU() { startDecomp('lu', 'LU Decomposition'); }
 function startQR() { startDecomp('qr', 'QR Decomposition'); }
 function startSVD() { startDecomp('svd', 'SVD'); }
 function startMatPow() { startDecomp('matpow', 'Matrix Power (Aⁿ)'); }
+function startInverse() { startDecomp('inverse', 'Matrix Inverse'); }
+function startTranspose() { startDecomp('transpose', 'Matrix Transpose'); }
+function startMatMul() { startDecomp('matmul', 'Matrix Multiplication'); }
 
 // ============ Matrix Power via PDP⁻¹ ============
 
@@ -1016,4 +1108,230 @@ function generateMatPow(n) {
         <div class="verify-msg">A${sup} = PD${sup}P⁻¹ ✓</div></div>`;
 
     startWizard('matpow', steps, summary);
+}
+
+// ============ Matrix Transpose ============
+
+function generateTranspose(n) {
+    let A;
+    do {
+        A = Array.from({ length: n }, () => Array.from({ length: n }, () => randInt(-6, 6)));
+    } while (matrixApproxEq(A, mTrans(A), 0.001));
+
+    const At = mTrans(A);
+    const steps = buildTransposeStep(A, At, n);
+    const summary = () => `<div class="summary-matrices">
+        ${renderMat(A, 'A =')}${renderMat(At, 'Aᵀ =')}
+        <div class="verify-msg">Aᵀ ✓</div></div>`;
+    startWizard('transpose', steps, summary);
+}
+
+function buildTransposeStep(A, At, n) {
+    return [{
+        content: `${renderMat(A, 'A =')}
+            <div class="step-instruction">The transpose flips A across its main diagonal: (Aᵀ)ᵢⱼ = Aⱼᵢ — row i of A becomes column i of Aᵀ.<br><br>
+            <b>Why:</b> every entry off the diagonal swaps places with its mirror image across the diagonal; entries on the diagonal stay put.</div>
+            ${inputMatrixHTML('t-At', n, n, null, 'Aᵀ =')}`,
+        validate: () => {
+            const Atv = readMatrixPF('t-At', n, n, null);
+            let wrongIds = [];
+            for (let i = 0; i < n; i++)
+                for (let j = 0; j < n; j++)
+                    if (!approxEq(Atv[i][j], At[i][j], 0.01)) wrongIds.push(`t-At-${i}-${j}`);
+            if (wrongIds.length === 0) return { correct: true, message: 'Aᵀ ✓' };
+            return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
+        }
+    }];
+}
+
+// ============ Matrix Inverse ============
+
+function generateInverse2x2() {
+    let A, det;
+    do {
+        A = [[randInt(-5, 5), randInt(-5, 5)], [randInt(-5, 5), randInt(-5, 5)]];
+        det = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    } while (det === 0);
+    return { A, det };
+}
+
+function cofactor3x3(A, i, j) {
+    const rows = [0, 1, 2].filter(r => r !== i);
+    const cols = [0, 1, 2].filter(c => c !== j);
+    const minor = A[rows[0]][cols[0]] * A[rows[1]][cols[1]] - A[rows[0]][cols[1]] * A[rows[1]][cols[0]];
+    return ((i + j) % 2 === 0 ? 1 : -1) * minor;
+}
+
+function generateInverse3x3() {
+    let A, det;
+    do {
+        A = Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => randInt(-3, 3)));
+        det = A[0][0] * cofactor3x3(A, 0, 0) + A[0][1] * cofactor3x3(A, 0, 1) + A[0][2] * cofactor3x3(A, 0, 2);
+    } while (det === 0);
+    return { A, det };
+}
+
+function generateInverse(n) {
+    if (n === 2) {
+        const { A, det } = generateInverse2x2();
+        const adj = [[A[1][1], -A[0][1]], [-A[1][0], A[0][0]]];
+        const Ainv = adj.map(row => row.map(v => v / det));
+        const steps = buildInverse2Steps(A, det, adj, Ainv);
+        const summary = () => `<div class="summary-matrices">
+            ${renderMat(A, 'A =')}${renderMat(Ainv, 'A⁻¹ =')}
+            <div class="verify-msg">A·A⁻¹ = I ✓</div></div>`;
+        startWizard('inverse', steps, summary);
+    } else {
+        const { A, det } = generateInverse3x3();
+        const C = Array.from({ length: 3 }, (_, i) => Array.from({ length: 3 }, (_, j) => cofactor3x3(A, i, j)));
+        const adj = mTrans(C);
+        const Ainv = adj.map(row => row.map(v => v / det));
+        const steps = buildInverse3Steps(A, det, C, Ainv);
+        const summary = () => `<div class="summary-matrices">
+            ${renderMat(A, 'A =')}${renderMat(Ainv, 'A⁻¹ =')}
+            <div class="verify-msg">A·A⁻¹ = I ✓</div></div>`;
+        startWizard('inverse', steps, summary);
+    }
+}
+
+function buildInverse2Steps(A, det, adj, Ainv) {
+    const tol = 0.05;
+    const hint = ' (Enter as decimal or fraction, e.g. 0.5 or 1/2)';
+
+    return [
+        {
+            content: `${renderMat(A, 'A =')}
+                <div class="step-instruction">For a 2×2 matrix, A⁻¹ = (1/det(A))·adj(A) — this only works when det(A) ≠ 0.<br><br>
+                <b>Why:</b> det(A) tells us A is invertible at all, and it's the number we'll divide the adjugate by.<br>
+                det(A) = a₁₁a₂₂ − a₁₂a₂₁ = ${A[0][0]}·${A[1][1]} − ${A[0][1]}·${A[1][0]}</div>
+                ${inputScalarHTML('inv-det', 'det(A) =')}`,
+            validate: () => {
+                const v = readScalar('inv-det');
+                if (approxEq(v, det, 0.01)) return { correct: true, message: `det(A) = ${fmtNum(det)}` };
+                return { correct: false, message: 'Not quite — recheck the highlighted field.', wrongIds: ['inv-det'] };
+            }
+        },
+        {
+            content: `${renderMat(A, 'A =')}
+                <div class="step-instruction"><b>Why:</b> for 2×2 matrices the adjugate has a shortcut — swap the diagonal entries and negate the off-diagonal ones.<br>
+                adj(A) = [[a₂₂, −a₁₂], [−a₂₁, a₁₁]]</div>
+                ${inputMatrixHTML('inv-adj', 2, 2, null, 'adj(A) =')}`,
+            validate: () => {
+                const M = readMatrixPF('inv-adj', 2, 2, null);
+                let wrongIds = [];
+                for (let i = 0; i < 2; i++)
+                    for (let j = 0; j < 2; j++)
+                        if (!approxEq(M[i][j], adj[i][j], 0.01)) wrongIds.push(`inv-adj-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
+            }
+        },
+        {
+            content: `<div class="step-instruction"><b>Why:</b> dividing the adjugate by det(A) rescales it into the actual inverse, so that A·A⁻¹ = I.<br>
+                A⁻¹ = (1/${fmtNum(det)})·adj(A)${hint}</div>
+                ${inputMatrixHTML('inv-final', 2, 2, null, 'A⁻¹ =')}`,
+            validate: () => {
+                const M = readMatrixPF('inv-final', 2, 2, null);
+                let wrongIds = [];
+                for (let i = 0; i < 2; i++)
+                    for (let j = 0; j < 2; j++)
+                        if (!approxEq(M[i][j], Ainv[i][j], tol)) wrongIds.push(`inv-final-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true, message: 'A⁻¹ found ✓' };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
+            }
+        }
+    ];
+}
+
+function buildInverse3Steps(A, det, C, Ainv) {
+    const tol = 0.05;
+    const hint = ' (Enter as decimal or fraction, e.g. 0.5 or 1/2)';
+
+    return [
+        {
+            content: `${renderMat(A, 'A =')}
+                <div class="step-instruction">Compute det(A) by cofactor expansion along row 1.<br><br>
+                <b>Why:</b> det(A) confirms A is invertible and becomes the scaling factor for the inverse.<br>
+                det(A) = a₁₁(a₂₂a₃₃−a₂₃a₃₂) − a₁₂(a₂₁a₃₃−a₂₃a₃₁) + a₁₃(a₂₁a₃₂−a₂₂a₃₁)<br>
+                = ${A[0][0]}(${A[1][1]}·${A[2][2]}−${A[1][2]}·${A[2][1]}) − ${A[0][1]}(${A[1][0]}·${A[2][2]}−${A[1][2]}·${A[2][0]}) + ${A[0][2]}(${A[1][0]}·${A[2][1]}−${A[1][1]}·${A[2][0]})</div>
+                ${inputScalarHTML('inv-det', 'det(A) =')}`,
+            validate: () => {
+                const v = readScalar('inv-det');
+                if (approxEq(v, det, 0.01)) return { correct: true, message: `det(A) = ${fmtNum(det)}` };
+                return { correct: false, message: 'Not quite — recheck the highlighted field.', wrongIds: ['inv-det'] };
+            }
+        },
+        {
+            content: `${renderMat(A, 'A =')}
+                <div class="step-instruction"><b>Why:</b> each cofactor Cᵢⱼ = (−1)ⁱ⁺ʲ·Mᵢⱼ, where Mᵢⱼ is the determinant of A with row i and column j deleted. We need all 9 to build the adjugate.</div>
+                ${inputMatrixHTML('inv-cof', 3, 3, null, 'Cofactor matrix C =')}`,
+            validate: () => {
+                const M = readMatrixPF('inv-cof', 3, 3, null);
+                let wrongIds = [];
+                for (let i = 0; i < 3; i++)
+                    for (let j = 0; j < 3; j++)
+                        if (!approxEq(M[i][j], C[i][j], 0.01)) wrongIds.push(`inv-cof-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
+            }
+        },
+        {
+            content: `<div class="step-instruction"><b>Why:</b> the adjugate is the transpose of the cofactor matrix; dividing it by det(A) gives A⁻¹, so that A·A⁻¹ = I.<br>
+                adj(A) = Cᵀ, then A⁻¹ = (1/${fmtNum(det)})·adj(A)${hint}</div>
+                ${inputMatrixHTML('inv-final', 3, 3, null, 'A⁻¹ =')}`,
+            validate: () => {
+                const M = readMatrixPF('inv-final', 3, 3, null);
+                let wrongIds = [];
+                for (let i = 0; i < 3; i++)
+                    for (let j = 0; j < 3; j++)
+                        if (!approxEq(M[i][j], Ainv[i][j], tol)) wrongIds.push(`inv-final-${i}-${j}`);
+                if (wrongIds.length === 0) return { correct: true, message: 'A⁻¹ found ✓' };
+                return { correct: false, message: 'Some entries are incorrect — check the highlighted cells.', wrongIds };
+            }
+        }
+    ];
+}
+
+// ============ Matrix Multiplication ============
+
+const SUB_DIGITS = ['', '₁', '₂', '₃'];
+
+function buildKnownMaskRowMajor(n, curI, curJ) {
+    return Array.from({ length: n }, (_, r) =>
+        Array.from({ length: n }, (_, c) => r < curI || (r === curI && c < curJ)));
+}
+
+function generateMatMul(n) {
+    const A = Array.from({ length: n }, () => Array.from({ length: n }, () => randInt(-4, 4)));
+    const B = Array.from({ length: n }, () => Array.from({ length: n }, () => randInt(-4, 4)));
+    const C = mMul(A, B);
+    const steps = buildMatMulSteps(A, B, C, n);
+    const summary = () => `<div class="summary-matrices">
+        ${renderMat(A, 'A =')}${renderMat(B, 'B =')}${renderMat(C, 'C = A×B =')}
+        <div class="verify-msg">C = A×B ✓</div></div>`;
+    startWizard('matmul', steps, summary);
+}
+
+function buildMatMulSteps(A, B, C, n) {
+    const steps = [];
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            const terms = Array.from({ length: n }, (_, k) => `${A[i][k]}·${B[k][j]}`).join(' + ');
+            const knownMask = buildKnownMaskRowMajor(n, i, j);
+            const id = `mm-c-${i}-${j}`;
+            const label = `C${SUB_DIGITS[i + 1]}${SUB_DIGITS[j + 1]}`;
+            steps.push({
+                content: `${renderMatMulProgress(A, B, C, n, i, j, knownMask)}
+                    <div class="step-instruction"><b>Why:</b> each entry of a product is a dot product — pair up row ${i + 1} of A (highlighted) with column ${j + 1} of B (highlighted), multiply corresponding entries, and add them up.<br>
+                    ${label} = row ${i + 1} of A · column ${j + 1} of B = ${terms}</div>
+                    ${inputScalarHTML(id, `${label} =`)}`,
+                validate: () => {
+                    const v = readScalar(id);
+                    if (approxEq(v, C[i][j], 0.01)) return { correct: true, message: `${label} = ${fmtNum(C[i][j])}` };
+                    return { correct: false, message: 'Not quite — recheck the highlighted field.', wrongIds: [id] };
+                }
+            });
+        }
+    }
+    return steps;
 }
